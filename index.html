@@ -1250,7 +1250,7 @@ bindRace(); bindHorses(); bindSettings(); bindLibrary();
 renderAll();
 setMode(fixBugs);
 const want = (location.hash || '').slice(1);
-showTab(['race', 'horses', 'results', 'settings', 'library', 'how'].includes(want) ? want : (store.get('tab') || 'results'));
+showTab(['race', 'horses', 'results', 'settings', 'library', 'how'].includes(want) ? want : (store.get('tab') || 'how'));
 })();
 </script>
 
