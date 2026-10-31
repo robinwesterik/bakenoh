@@ -139,6 +139,7 @@ table.parts td.v.pos { color: var(--good); } table.parts td.v.neg { color: var(-
 .bugs li { margin-bottom: .5rem; max-width: 72ch; }
 .video { position: relative; width: 100%; max-width: 960px; margin-inline: auto; aspect-ratio: 16 / 9; border: 2px solid var(--rule); border-radius: var(--r); overflow: hidden; background: var(--sunk); }
 .video { display: block; }
+.video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .video img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .video .play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 76px; height: 54px; border-radius: 12px; background: rgba(0,0,0,.72); color: #fff; display: grid; place-items: center; font-size: 26px; transition: background .15s; }
 .video:hover .play, .video:focus-visible .play { background: #c4302b; }
@@ -848,6 +849,8 @@ function niceStep(x) { const p = Math.pow(10, Math.floor(Math.log10(x || 1))), m
 $('#wf-horse').addEventListener('change', renderWaterfall);
 $('#wf-p0').addEventListener('click', () => { wfPass = 0; $('#wf-p0').setAttribute('aria-pressed', 'true'); $('#wf-p1').setAttribute('aria-pressed', 'false'); renderWaterfall(); });
 $('#wf-p1').addEventListener('click', () => { wfPass = 1; $('#wf-p1').setAttribute('aria-pressed', 'true'); $('#wf-p0').setAttribute('aria-pressed', 'false'); renderWaterfall(); });
+// Served from a website: swap the picture for the real YouTube player (embeds don't work from file://)
+if (location.protocol !== 'file:') { const v = $('a.video'); if (v) v.outerHTML = '<div class="video"><iframe src="https://www.youtube-nocookie.com/embed/dnHHiFlP16U?rel=0" title="Asmik 馬券王V3 Game Boy TV commercial, October 1993" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>'; }
 // ---------- tabs, mode ----------
 function showTab(t) {
   $$('nav.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t ? 'true' : 'false'));
