@@ -1,0 +1,9 @@
+# never commit ROMs, recompiled output, saves or local work
+*.gb
+*.gbc
+*.sav
+*.state
+recomp/
+work/
+test/out/
+__pycache__/

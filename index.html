@@ -1,0 +1,1258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bakenoh V3 Calculator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a Game Boy menu reimagined as a web form. Boxed panels with the game's double rule, tabs across the top,
+   results always one tap away. Palette is the DMG's four greens, re-tuned for screens in light and dark. */
+:root {
+  --bg: #e4ecd2;        /* screen paper */
+  --panel: #f2f6e8;
+  --sunk: #d6e2bd;
+  --ink: #1d3317;       /* darkest DMG shade */
+  --ink-2: #4a6340;
+  --rule: #2f4a27;
+  --accent: #3f7a2a;    /* mid green */
+  --accent-ink: #f2f6e8;
+  --hi: #a9c94a;        /* lightest lit pixel */
+  --good: #2e7d32; --bad: #a23b2a; --warn: #8a6d10;
+  --gain: #3f7a2a; --loss: #8a4aa8;   /* waterfall pair, validated for CVD on --panel */
+  --font-display: "DotGothic16", "MS Gothic", ui-monospace, monospace;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 3px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1a0d; --panel: #16240f; --sunk: #0b1409; --ink: #cfe3a4; --ink-2: #93ad74; --rule: #6f9a4c;
+  --accent: #8bbf3c; --accent-ink: #0f1a0d; --hi: #4f7a22; --good: #8fd16b; --bad: #f08a72; --warn: #e3c35a; --gain: #6fa22c; --loss: #a676dc; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0f1a0d; --panel: #16240f; --sunk: #0b1409; --ink: #cfe3a4; --ink-2: #93ad74; --rule: #6f9a4c;
+  --accent: #8bbf3c; --accent-ink: #0f1a0d; --hi: #4f7a22; --good: #8fd16b; --bad: #f08a72; --warn: #e3c35a; --gain: #6fa22c; --loss: #a676dc; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font-body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 12px 48px; }
+h1, h2, h3, .display { font-family: var(--font-display); font-weight: 400; letter-spacing: .02em; text-wrap: balance; }
+h2 { font-size: 1.35rem; margin: 0 0 .6rem; }
+h3 { font-size: 1.05rem; margin: 0 0 .5rem; }
+p { margin: 0 0 .8rem; max-width: 68ch; }
+a { color: var(--accent); }
+button, select, input, textarea { font: inherit; color: var(--ink); }
+:focus-visible { outline: 3px solid var(--hi); outline-offset: 2px; }
+.mono, .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* header */
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 3px double var(--rule); }
+.top-inner { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding-block: 10px; }
+.brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+.brand h1 { margin: 0; font-size: 1.6rem; line-height: 1; }
+.brand .jp { font-family: var(--font-display); color: var(--ink-2); font-size: 1rem; }
+.chip { display: inline-flex; align-items: center; gap: 6px; border: 2px solid var(--rule); background: var(--panel); border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: .9rem; }
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.seg { display: inline-flex; border: 2px solid var(--rule); border-radius: 999px; overflow: hidden; }
+.seg button { border: 0; background: var(--panel); padding: 4px 12px; cursor: pointer; font-size: .9rem; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+nav.tabs { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: thin; }
+nav.tabs button { flex: none; font-family: var(--font-display); font-size: 1rem; background: transparent; border: 2px solid transparent; border-radius: var(--r); padding: 4px 12px; cursor: pointer; }
+nav.tabs button[aria-selected="true"] { border-color: var(--rule); background: var(--panel); }
+nav.tabs button .cursor { visibility: hidden; color: var(--accent); }
+nav.tabs button[aria-selected="true"] .cursor { visibility: visible; }
+
+/* boxes: the game's double-ruled windows */
+.box { background: var(--panel); border: 2px solid var(--rule); border-radius: var(--r); box-shadow: inset 0 0 0 3px var(--panel), inset 0 0 0 4px var(--rule); padding: 16px 18px; min-width: 0; }
+.box + .box { margin-top: 14px; }
+.grid { display: grid; gap: 14px; }
+.cols-2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.cols-3 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.hint { color: var(--ink-2); font-size: .88rem; }
+.eyebrow { font-family: var(--font-display); color: var(--ink-2); font-size: .85rem; letter-spacing: .08em; text-transform: uppercase; }
+
+/* form */
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px 14px; }
+label.f { display: flex; flex-direction: column; gap: 3px; font-size: .85rem; color: var(--ink-2); min-width: 0; }
+label.f > span { font-weight: 500; }
+input[type=text], input[type=number], select, textarea { background: var(--bg); border: 2px solid var(--rule); border-radius: var(--r); padding: 6px 8px; min-width: 0; width: 100%; }
+input[type=number] { font-family: var(--font-mono); }
+input:disabled, select:disabled { opacity: .55; }
+textarea { min-height: 70px; resize: vertical; }
+.check { display: flex; align-items: center; gap: 8px; font-size: .92rem; }
+.check input { width: 18px; height: 18px; accent-color: var(--accent); }
+.btn { border: 2px solid var(--rule); background: var(--panel); border-radius: var(--r); padding: 6px 12px; cursor: pointer; font-weight: 500; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.small { padding: 2px 8px; font-size: .85rem; }
+.btn.danger { color: var(--bad); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+/* horse cards */
+.horse { border: 2px solid var(--rule); border-radius: var(--r); background: var(--panel); margin-bottom: 10px; }
+.horse.scratched { opacity: .6; }
+.horse summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 44px minmax(0, 1.4fr) minmax(0, 1.2fr) minmax(0, .9fr) 70px 40px 22px; gap: 10px; align-items: center; padding: 8px 12px; }
+.horse summary::-webkit-details-marker { display: none; }
+.horse summary .no { font-family: var(--font-display); font-size: 1.3rem; text-align: center; border: 2px solid var(--rule); border-radius: var(--r); background: var(--bg); line-height: 1.5; }
+.horse summary .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.horse summary .meta { color: var(--ink-2); font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.horse summary .mark { font-family: var(--font-display); font-size: 1.2rem; text-align: center; }
+.horse summary .caret { transition: transform .15s; }
+.horse[open] summary .caret { transform: rotate(90deg); }
+.horse .body { padding: 4px 14px 16px; border-top: 2px dashed var(--rule); }
+.horse .body h4 { font-family: var(--font-display); font-weight: 400; margin: 14px 0 6px; font-size: 1rem; }
+.rec { border-collapse: collapse; font-size: .88rem; }
+.rec th { font-weight: 500; color: var(--ink-2); padding: 2px 6px; text-align: center; }
+.rec td { padding: 2px 3px; }
+.rec input { width: 52px; text-align: center; padding: 3px 2px; }
+.rec select { width: auto; padding: 3px 4px; }
+.scroll-x { overflow-x: auto; }
+@media (max-width: 640px) {
+  .horse summary { grid-template-columns: 40px minmax(0, 1fr) 56px 22px; }
+  .horse summary .hide-sm { display: none; }
+}
+
+/* results */
+.headline { font-family: var(--font-display); font-size: 1.9rem; line-height: 1.2; margin: 0 0 .3rem; }
+.order { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.order li { display: grid; grid-template-columns: 52px 42px minmax(0, 1fr) minmax(70px, 34%) 60px; gap: 10px; align-items: center; }
+.order .rk { font-family: var(--font-display); font-size: 1.05rem; }
+.order .hn { font-family: var(--font-display); text-align: center; border: 2px solid var(--rule); border-radius: var(--r); background: var(--bg); }
+.order .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar { height: 10px; background: var(--sunk); border-radius: 2px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); }
+.order li.top .rk { color: var(--accent); }
+@media (max-width: 560px) { .order li { grid-template-columns: 40px 36px minmax(0, 1fr) 54px; gap: 8px; } .order .bar { display: none; } }
+.order .sc { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: .88rem; }
+.picks { display: flex; flex-wrap: wrap; gap: 8px; }
+.pick { font-family: var(--font-display); font-size: 1.15rem; border: 2px solid var(--rule); border-radius: var(--r); padding: 2px 10px; background: var(--bg); }
+.pick.fav { font-size: 1.5rem; background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.pick small { font-family: var(--font-mono); font-size: .7rem; opacity: .8; margin-left: 6px; }
+.tag { display: inline-block; font-size: .75rem; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; }
+.tag.warn { color: var(--warn); } .tag.good { color: var(--good); } .tag.bad { color: var(--bad); }
+table.parts { width: 100%; border-collapse: collapse; font-size: .9rem; }
+table.parts th, table.parts td { padding: 4px 6px; border-bottom: 1px solid var(--sunk); text-align: left; }
+table.parts td.v { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.parts td.v.pos { color: var(--good); } table.parts td.v.neg { color: var(--bad); }
+.split { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
+
+/* explainer */
+.eli5 ol { padding-left: 1.3rem; } .eli5 li { margin-bottom: .55rem; max-width: 70ch; }
+.why { border-left: 4px solid var(--hi); padding: 2px 0 2px 12px; color: var(--ink-2); max-width: 70ch; }
+.bugs li { margin-bottom: .5rem; max-width: 72ch; }
+.video { position: relative; width: 100%; max-width: 960px; margin-inline: auto; aspect-ratio: 16 / 9; border: 2px solid var(--rule); border-radius: var(--r); overflow: hidden; background: var(--sunk); }
+.video { display: block; }
+.video img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.video .play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 76px; height: 54px; border-radius: 12px; background: rgba(0,0,0,.72); color: #fff; display: grid; place-items: center; font-size: 26px; transition: background .15s; }
+.video:hover .play, .video:focus-visible .play { background: #c4302b; }
+.cm { display: grid; grid-template-columns: minmax(0, 480px) minmax(0, 1fr); gap: 16px; align-items: center; text-decoration: none; color: inherit; }
+.cm img { width: 100%; aspect-ratio: 16/9; object-fit: cover; border: 2px solid var(--rule); border-radius: var(--r); display: block; max-width: 100%; }
+@media (max-width: 560px) { .cm { grid-template-columns: 1fr; } }
+
+/* library */
+table.lib { border-collapse: collapse; font-size: .88rem; width: 100%; }
+table.lib th, table.lib td { border-bottom: 1px solid var(--sunk); padding: 4px; text-align: left; vertical-align: middle; }
+table.lib input[type=number] { width: 54px; padding: 3px; text-align: center; }
+table.lib input[type=text] { min-width: 150px; padding: 3px 6px; }
+table.lib select { width: auto; padding: 3px; }
+
+/* formula + diagram + waterfall */
+.formula { font-family: var(--font-mono); font-size: .95rem; background: var(--bg); border: 2px solid var(--rule); border-radius: var(--r); padding: 12px 14px; overflow-x: auto; line-height: 1.9; }
+.formula .eq { white-space: nowrap; }
+.formula var { font-style: italic; font-family: var(--font-body); font-weight: 600; }
+.formula .c { color: var(--ink-2); font-family: var(--font-body); font-size: .85rem; white-space: normal; }
+dl.terms { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 12px 0 0; max-width: 78ch; }
+dl.terms dt { font-family: var(--font-mono); font-weight: 500; } dl.terms dd { margin: 0; color: var(--ink-2); }
+svg.flow { display: block; width: 100%; min-width: 760px; height: auto; }
+svg.flow .bx { fill: var(--panel); stroke: var(--rule); stroke-width: 2; }
+svg.flow .bx.key { fill: var(--sunk); }
+svg.flow .lane { fill: none; stroke: var(--rule); stroke-width: 1; stroke-dasharray: 4 4; opacity: .6; }
+svg.flow text { fill: var(--ink); font-family: var(--font-body); font-size: 13px; }
+svg.flow text.t { font-family: var(--font-display); font-size: 15px; }
+svg.flow text.s { fill: var(--ink-2); font-size: 11.5px; }
+svg.flow .ar { stroke: var(--accent); stroke-width: 2; fill: none; marker-end: url(#arr); }
+svg.flow #arr path { fill: var(--accent); }
+.wf { position: relative; }
+.wf-row { display: grid; grid-template-columns: minmax(110px, 190px) minmax(0, 1fr) 64px 64px; gap: 10px; align-items: center; height: 28px; border-radius: 2px; }
+.wf-row:hover, .wf-row:focus { background: var(--sunk); outline: none; }
+.wf-row .lab { font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-row .val, .wf-row .run { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: .85rem; }
+.wf-row .run { color: var(--ink-2); }
+.wf-row.total { border-top: 2px solid var(--rule); height: 32px; font-weight: 600; }
+.wf-track { position: relative; height: 16px; }
+.wf-track .grid-l { position: absolute; top: -6px; bottom: -6px; width: 1px; background: var(--sunk); }
+.wf-track .zero { position: absolute; top: -6px; bottom: -6px; width: 1px; background: var(--ink-2); }
+.wf-track .seg { position: absolute; top: 2px; height: 12px; border-radius: 2px; min-width: 2px; }
+.wf-track .seg.gain { background: var(--gain); } .wf-track .seg.loss { background: var(--loss); } .wf-track .seg.tot { background: var(--ink); }
+.wf-head { display: grid; grid-template-columns: minmax(110px, 190px) minmax(0, 1fr) 64px 64px; gap: 10px; font-size: .78rem; color: var(--ink-2); margin-bottom: 4px; }
+.wf-axis { position: relative; height: 16px; } .wf-axis span { position: absolute; transform: translateX(-50%); font-family: var(--font-mono); font-size: .72rem; }
+.wf-head .r { text-align: right; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: .85rem; color: var(--ink-2); margin: 8px 0; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -1px; margin-right: 6px; }
+.wf-tip { position: absolute; pointer-events: none; background: var(--panel); border: 2px solid var(--rule); border-radius: var(--r); padding: 6px 10px; font-size: .85rem; box-shadow: 0 4px 14px rgba(0,0,0,.18); z-index: 3; min-width: 180px; }
+.wf-tip b { font-family: var(--font-display); font-weight: 400; }
+@media (max-width: 560px) { .wf-row, .wf-head { grid-template-columns: 96px minmax(0, 1fr) 52px; } .wf-row .run, .wf-head .run { display: none; } }
+
+.panel[hidden] { display: none !important; }
+.music-note { font-family: var(--font-display); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)} body{margin:0} [hidden]{display:none!important} img{max-width:100%}</style>
+</head>
+<body>
+
+
+<header class="top">
+  <div class="wrap top-inner" style="padding-block:10px 0">
+    <div class="brand"><h1>BAKENOH V3</h1><span class="jp">馬券王V3</span></div>
+    <div class="seg" role="group" aria-label="Engine behaviour">
+      <button id="mode-orig" aria-pressed="true" title="Exactly what the 1993 cartridge computes, bugs included">1993 cartridge</button>
+      <button id="mode-fix" aria-pressed="false" title="Same model with the original programming bugs fixed">Bugs fixed</button>
+    </div>
+  </div>
+  <div class="wrap" style="padding-block:4px 0">
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button role="tab" data-tab="how" aria-selected="false"><span class="cursor">▶</span>How it works</button>
+      <button role="tab" data-tab="race" aria-selected="true"><span class="cursor">▶</span>Race</button>
+      <button role="tab" data-tab="horses" aria-selected="false"><span class="cursor">▶</span>Horses</button>
+      <button role="tab" data-tab="results" aria-selected="false"><span class="cursor">▶</span>Results</button>
+      <button role="tab" data-tab="settings" aria-selected="false"><span class="cursor">▶</span>Weights &amp; options</button>
+      <button role="tab" data-tab="library" aria-selected="false"><span class="cursor">▶</span>Courses, jockeys, races</button>
+    </nav>
+  </div>
+</header>
+
+
+<main class="wrap">
+  <div id="top-result" class="box" style="margin-top:14px; display:flex; flex-wrap:wrap; gap:8px 18px; align-items:center"></div>
+
+  <!-- RACE -->
+  <section class="panel" id="tab-race" style="margin-top:14px">
+    <div class="box">
+      <div class="row" style="justify-content:space-between"><h2>Race</h2><span class="hint" id="example-note"></span></div>
+      <div class="fields">
+        <label class="f" style="grid-column: span 2"><span>Race (preset)</span><select id="r-preset"></select></label>
+        <label class="f"><span>Race name</span><input type="text" id="r-name"></label>
+        <label class="f"><span>Racecourse</span><select id="r-course"></select></label>
+        <label class="f"><span>Distance (m)</span><input type="number" id="r-meters" min="800" max="4000" step="100"></label>
+        <label class="f"><span>Distance class</span><select id="r-dist"><option value="0">Short (≤1600 m)</option><option value="1">Mid (1700–2200 m)</option><option value="2">Long (≥2300 m)</option></select></label>
+        <label class="f"><span>Surface</span><select id="r-surface"><option value="0">Turf</option><option value="1">Dirt</option></select></label>
+        <label class="f"><span>Direction</span><select id="r-dir"><option value="0">Left-handed</option><option value="1">Right-handed</option></select></label>
+        <label class="f"><span>Circuit</span><select id="r-circuit"><option value="0">Inner</option><option value="1">Outer</option><option value="2">Single circuit</option></select></label>
+        <label class="f"><span>Weight rule</span><select id="r-wcond"><option value="0">Set weights (定量)</option><option value="1">Allowance (別定)</option><option value="2">Weight for age (馬齢)</option><option value="3">Handicap (ハンデ)</option></select></label>
+        <label class="f"><span>Track condition</span><select id="r-track"><option value="0">Firm (良)</option><option value="1">Good to soft (やや重)</option><option value="2">Soft (重)</option><option value="3">Heavy (不良)</option></select></label>
+        <label class="f check" style="align-self:end"><input type="checkbox" id="r-low"> Low-class race (¥9M and under)</label>
+      </div>
+      <p class="hint" style="margin-top:10px">Picking a preset fills in the conditions the cartridge stores for that race. You can still change them. Distance in metres sets the class automatically.</p>
+    </div>
+    <div class="box"><h3>Course tip</h3><p id="tip-text"></p><p class="hint" id="tip-src"></p></div>
+  </section>
+
+  <!-- HORSES -->
+  <section class="panel" id="tab-horses" hidden style="margin-top:14px">
+    <div class="box">
+      <div class="row" style="justify-content:space-between">
+        <h2>Horses</h2>
+        <div class="row"><button class="btn" id="h-add">Add horse</button><button class="btn" id="h-expand">Expand all</button><button class="btn" id="h-collapse">Collapse all</button><button class="btn danger" id="h-clear">Clear all horses</button></div>
+      </div>
+      <p class="hint">Horse number = draw order. Up to 18 runners; the cartridge needs at least 5 starters. Leave records at 0 if you don't know them; the game treats blanks the same way.</p>
+    </div>
+    <div id="horse-list" style="margin-top:14px"></div>
+  </section>
+
+  <!-- RESULTS -->
+  <section class="panel" id="tab-results" hidden style="margin-top:14px">
+    <div class="split">
+      <div>
+        <div class="box" id="res-comment"></div>
+        <div class="box"><h3>Predicted finishing order</h3><ol class="order" id="res-order"></ol><p class="hint" style="margin-top:10px" id="res-scale"></p></div>
+        <div class="box"><h3>Second opinion (pass 2)</h3><p class="hint">The game scores every horse twice. The second pass ignores past-race class and leans harder on today's signals. It only feeds the bet picks.</p><ol class="order" id="res-order2"></ol></div>
+      </div>
+      <div>
+        <div class="box"><h3>Horse-number picks <span class="hint">(馬連 quinella)</span></h3><div id="res-picks"></div></div>
+        <div class="box"><h3>Bracket picks <span class="hint">(枠連)</span></h3><div id="res-brackets"></div></div>
+        <div class="box"><h3>Why this horse scored what it did</h3>
+          <div class="row" style="margin-bottom:8px"><label class="f" style="flex:1"><span>Horse</span><select id="res-horse"></select></label></div>
+          <div class="scroll-x"><table class="parts" id="res-parts"></table></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="panel" id="tab-settings" hidden style="margin-top:14px">
+    <div class="grid cols-2">
+      <div class="box">
+        <h2>Item weights</h2>
+        <p class="hint">How much each kind of data counts. The cartridge offers 11 steps from 0% to 300%; 100% is the default.</p>
+        <div id="weights" class="fields" style="grid-template-columns: repeat(auto-fill, minmax(200px,1fr))"></div>
+        <div class="row" style="margin-top:12px"><button class="btn" id="w-reset">Reset all to 100%</button></div>
+        <p class="hint" id="w-note" style="margin-top:10px"></p>
+      </div>
+      <div class="box">
+        <h2>Options</h2>
+        <div class="grid" style="gap:10px">
+          <label class="check"><input type="checkbox" id="o-simple"> Simple input mode (かんりゃく): skips sex/age, paddock, body-weight ranges and other columns</label>
+          <label class="check"><input type="checkbox" id="o-narrow"> Narrow down the bet picks (しぼる)</label>
+        </div>
+        <h3 style="margin-top:16px">Questions to use</h3>
+        <p class="hint">Turning an item off works like the cartridge's "Set question items" screen: that data is ignored.</p>
+        <div id="questions" class="grid" style="gap:6px"></div>
+      </div>
+    </div>
+    <div class="box">
+      <h2>Save &amp; load</h2>
+      <p class="hint">Everything is saved in this browser automatically. Export to move a race or your edited library to another device.</p>
+      <div class="row">
+        <button class="btn" id="x-export">Export race + library</button>
+        <button class="btn" id="x-import">Import</button>
+        <button class="btn" id="x-example">Load example race</button>
+        <button class="btn" id="x-blank">New empty race</button>
+      </div>
+      <textarea id="x-text" style="margin-top:10px; width:100%; min-height:120px" class="mono" placeholder="Exported JSON appears here. Paste JSON here and press Import."></textarea>
+    </div>
+  </section>
+
+  <!-- LIBRARY -->
+  <section class="panel" id="tab-library" hidden style="margin-top:14px">
+    <div class="box">
+      <div class="row" style="justify-content:space-between"><h2>Courses, jockeys and races</h2><button class="btn danger" id="lib-reset">Restore 1993 cartridge data</button></div>
+      <p class="hint">The cartridge ships with the 1993 JRA world: 10 racecourses, 61 jockey ratings and 45 graded races. Edit them or add your own; changes save in this browser.</p>
+    </div>
+    <div class="box">
+      <div class="row" style="justify-content:space-between"><h3>Racecourses</h3><div class="row"><button class="btn small" id="c-add">Add course</button><button class="btn small danger" id="c-clear">Clear all</button><button class="btn small" id="c-restore">Restore 1993</button></div></div>
+      <div class="row" style="margin-bottom:10px"><label class="f" style="flex:1; max-width:340px"><span>Edit course</span><select id="c-pick"></select></label></div>
+      <div id="c-edit"></div>
+    </div>
+    <div class="box">
+      <div class="row" style="justify-content:space-between"><h3>Jockeys</h3><div class="row"><button class="btn small" id="j-add">Add jockey</button><button class="btn small danger" id="j-clear">Clear all</button><button class="btn small" id="j-restore">Restore 1993</button></div></div>
+      <p class="hint">Points at 100% weight. Base always counts; the others count when today's race or the horse's running style matches.</p>
+      <div class="scroll-x"><table class="lib" id="j-table"></table></div>
+    </div>
+    <div class="box">
+      <div class="row" style="justify-content:space-between"><h3>Race presets</h3><div class="row"><button class="btn small" id="rp-add">Add race</button><button class="btn small danger" id="rp-clear">Clear all</button><button class="btn small" id="rp-restore">Restore 1993</button></div></div>
+      <div class="scroll-x"><table class="lib" id="rp-table"></table></div>
+    </div>
+  </section>
+
+  <!-- HOW -->
+  <section class="panel" id="tab-how" hidden style="margin-top:14px">
+    <div class="box">
+      <h2>The 1993 TV commercial</h2>
+      <a class="video" href="https://youtu.be/dnHHiFlP16U" target="_blank" rel="noopener" aria-label="Watch the 1993 Bakenoh V3 TV commercial on YouTube">
+        <img src="https://i.ytimg.com/vi/dnHHiFlP16U/maxresdefault.jpg" onerror="this.onerror=null;this.src='https://i.ytimg.com/vi/dnHHiFlP16U/hqdefault.jpg'" alt="Still from the 1993 Bakenoh V3 TV commercial">
+        <span class="play" aria-hidden="true">▶</span>
+      </a>
+    </div>
+    <div class="box eli5">
+      <h2>How Bakenoh V3 picks a winner</h2>
+      <p>Every horse gets a single score. It starts from the horse's past results, then gains or loses points for each piece of data you enter about it. The highest score is the predicted winner. The method is fixed point tables and hand-written rules, so the same inputs always give the same answer.</p>
+      <ol>
+        <li><b>Starting mark from past results.</b> Each of the last four races is worth points depending on its class (a G1 counts for far more than a maiden race) and where the horse finished. Winning by a big margin is worth more than a close win; losing by a nose costs less than losing by ten lengths. The record at today's distance is averaged in.
+          <div class="why">Probable reason: the newspaper form guide is the most reliable data a 1993 punter had, so it sets the baseline.</div></li>
+        <li><b>A ruler for the race.</b> The game takes the field's average starting mark and divides it by nine. That number is the value of "one point" in this race, so a bonus means the same thing in a race of champions as in a race of maidens.
+          <div class="why">Probable reason: keeps all the small bonuses in proportion, whatever class the race is.</div></li>
+        <li><b>Plus and minus points for everything else.</b> Training reports, the jockey, paddock looks, the marks you copied from the paper, sex and age for the distance, best distance and track type, the odds, and a few more. Each is worth roughly −3 to +4 points, multiplied by the weight you set for that item.
+          <div class="why">Probable reason: simple tables that a designer could tune by hand and that ran fast on a 4 MHz Game Boy.</div></li>
+        <li><b>Track knowledge.</b> Hand-written rules for each racecourse: closers do well at Tokyo, struggle at Nakayama; inside draws help at Hanshin; a lone front-runner tends to hold on everywhere. Big fields punish the widest draws.
+          <div class="why">Probable reason: this is the "expert" content the box sold on, the same wisdom as the course tips you read on screen.</div></li>
+        <li><b>Rank, then pair up.</b> Horses are sorted by total. For bets the game runs a second scoring pass that drops the starting mark and leans on today's signals, then looks at pairs inside the top six of both lists. Pairs are sorted by how much they'd pay (the product of the two odds) into favorite, mid-price and longshot picks.
+          <div class="why">Probable reason: in 1993 the popular bets were quinellas (馬連, introduced 1991) and bracket quinellas (枠連); picking pairs by price gives a punter a sensible spread.</div></li>
+        <li><b>A sentence to finish.</b> If many horses score within 20% of the leader the race is "wide open"; if the leader is far ahead it's "a safe bet". The number of non-favorite picks decides whether to promise a big payout.</li>
+      </ol>
+      <p>When young horses (2-year-olds) or a low-class race are involved, the game switches to a second weight table: form and records are almost ignored and only the jockey, your marks and the odds count, presumably because those horses have too little history to trust.</p>
+    </div>
+
+    <div class="box">
+      <h2>The original formula</h2>
+      <p>Exactly what the cartridge computes for horse <var>h</var>, in whole numbers (every division rounds down).</p>
+      <div class="formula">
+        <div class="eq">score<sub>1</sub>(<var>h</var>) = <var>B</var>(<var>h</var>) + Σ<sub>items</sub> ⌊ <var>e</var>(<var>h</var>) · <var>U</var> · <var>w</var>% ⌋ + Σ<sub>rules</sub> <var>r</var>(<var>h</var>) · <var>U</var></div>
+        <div class="eq">score<sub>2</sub>(<var>h</var>) = &nbsp;&nbsp;&nbsp;&nbsp;0 &nbsp;&nbsp;+ Σ<sub>items</sub> ⌊ <var>e</var>′(<var>h</var>) · <var>U</var> · <var>w</var>% ⌋ + Σ<sub>rules</sub> 2·<var>r</var>(<var>h</var>) · <var>U</var></div>
+        <div class="eq">&nbsp;</div>
+        <div class="eq"><var>B</var>(<var>h</var>) = ½ · ( <var>D</var>(<var>h</var>) + <var>F</var>(<var>h</var>) )</div>
+        <div class="eq"><var>D</var>(<var>h</var>) = <span>(5000·1st + 2500·2nd + 1000·3rd + 250·unplaced) ÷ (2·runs + 9)</span> · <var>w</var><sub>distance</sub>% <span class="c">&nbsp;record at today's distance</span></div>
+        <div class="eq"><var>F</var>(<var>h</var>) = Σ<sub>last 4 races</sub> ½ · ( <var>T</var><sub>finish</sub>[class][place] + <var>T</var><sub>margin</sub>[class][margin] ) ÷ <var>k</var> · <var>w</var><sub>form</sub>% <span class="c">&nbsp;<var>k</var> = 11, 13, 15, 17 for 1–4 races run</span></div>
+        <div class="eq"><var>U</var> = max( 10, ⌊ average <var>B</var> ÷ 9 ⌋ ) <span class="c">&nbsp;the value of one point in this race</span></div>
+      </div>
+      <dl class="terms">
+        <dt>e(h)</dt><dd>points from the item tables, usually −3 to +4: training, jockey, marks, paddock, sex &amp; age, best distance, best course type, records, popularity, body weight. Pass 2 (<var>e</var>′) uses its own, usually larger, tables.</dd>
+        <dt>records</dt><dd>exception: course record, racecourse record and heavy-track record add their record score (the same 5000/2500/1000/250 formula as <var>D</var>, divided by 2–10) × <var>w</var>% directly, without <var>U</var>.</dd>
+        <dt>w%</dt><dd>your item weight, 0–300% (default 100%). In juvenile and ¥9M-and-under races only jockey, marks and odds keep their weight.</dd>
+        <dt>r(h)</dt><dd>course and race rules, not affected by weights: track bias by running style and draw, lone front-runner, big-field draw penalty, soft-ground outsiders.</dd>
+        <dt>T tables</dt><dd>a G1 win by 0.3 s or more is worth 6000 + 6000; a maiden win about 100 + 100. Full tables in <span class="mono">prediction.md</span>.</dd>
+        <dt>Ranking</dt><dd>sort by score<sub>1</sub> for the finishing order. Bet picks are pairs inside the top 6 of both score<sub>1</sub> and score<sub>2</sub>, ordered by round(odds<sub>A</sub>) × round(odds<sub>B</sub>).</dd>
+      </dl>
+    </div>
+    <div class="box">
+      <h2>How the pieces fit</h2>
+      <div class="scroll-x">
+      <svg class="flow" viewBox="0 0 960 330" role="img" aria-labelledby="flow-t">
+        <title id="flow-t">Flow from inputs to base score, the scale U, two scoring passes, rankings and picks</title>
+        <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
+        <rect class="bx" x="10" y="20" width="170" height="78" rx="3"/><text class="t" x="24" y="46">Your inputs</text><text class="s" x="24" y="66">form, records, jockey,</text><text class="s" x="24" y="82">paddock, odds, marks…</text>
+        <rect class="bx key" x="230" y="20" width="220" height="78" rx="3"/><text class="t" x="244" y="46">Base score B</text><text class="s" x="244" y="66">½ × (distance record</text><text class="s" x="244" y="82">+ last four races)</text>
+        <rect class="bx key" x="500" y="20" width="200" height="78" rx="3"/><text class="t" x="514" y="46">Ruler U</text><text class="s" x="514" y="66">average B ÷ 9, at least 10</text><text class="s" x="514" y="82">= one point in this race</text>
+        <rect class="bx" x="750" y="20" width="200" height="78" rx="3"/><text class="t" x="764" y="46">Your weights w%</text><text class="s" x="764" y="66">0–300% per item</text><text class="s" x="764" y="82">(250% paddock bug)</text>
+        <path class="ar" d="M180,59 H226"/><path class="ar" d="M450,59 H496"/>
+        <rect class="lane" x="10" y="128" width="940" height="82" rx="3"/><text class="s" x="18" y="146">PASS 1</text>
+        <rect class="bx" x="70" y="150" width="130" height="48" rx="3"/><text x="84" y="179">start at B</text>
+        <rect class="bx" x="230" y="150" width="250" height="48" rx="3"/><text x="244" y="172">+ 34 item points</text><text class="s" x="244" y="188">e × U × w%</text>
+        <rect class="bx" x="510" y="150" width="200" height="48" rx="3"/><text x="524" y="172">+ course &amp; race rules</text><text class="s" x="524" y="188">r × U</text>
+        <rect class="bx key" x="740" y="150" width="200" height="48" rx="3"/><text class="t" x="754" y="180">Finishing order</text>
+        <path class="ar" d="M200,174 H226"/><path class="ar" d="M480,174 H506"/><path class="ar" d="M710,174 H736"/>
+        <rect class="lane" x="10" y="222" width="940" height="82" rx="3"/><text class="s" x="18" y="240">PASS 2</text>
+        <rect class="bx" x="70" y="244" width="130" height="48" rx="3"/><text x="84" y="273">start at 0</text>
+        <rect class="bx" x="230" y="244" width="250" height="48" rx="3"/><text x="244" y="266">+ 34 item points</text><text class="s" x="244" y="282">bigger tables, e′ × U × w%</text>
+        <rect class="bx" x="510" y="244" width="200" height="48" rx="3"/><text x="524" y="266">+ course &amp; race rules</text><text class="s" x="524" y="282">2r × U</text>
+        <rect class="bx key" x="740" y="244" width="200" height="48" rx="3"/><text class="t" x="754" y="266">Bet picks</text><text class="s" x="754" y="282">top-6 pairs by odds × odds</text>
+        <path class="ar" d="M200,268 H226"/><path class="ar" d="M480,268 H506"/><path class="ar" d="M710,268 H736"/>
+        <path class="ar" d="M600,98 V146"/><path class="ar" d="M850,98 C850,120 380,118 356,146"/><path class="ar" d="M340,98 V112 H135 V146"/>
+        <path class="ar" d="M840,198 V240"/>
+      </svg>
+      </div>
+      <p class="hint" style="margin-top:8px">Pass 1 also decides the commentary ("Wide open!", "A safe bet!" …) from how close the top scores are.</p>
+    </div>
+    <div class="box">
+      <div class="row" style="justify-content:space-between; align-items:flex-end">
+        <div><h2>Watch a score being built</h2><p class="hint" style="margin:0">Live: uses the race on the Race and Horses tabs. Hover a row for details.</p></div>
+        <div class="row">
+          <label class="f"><span>Horse</span><select id="wf-horse"></select></label>
+          <div class="seg" role="group" aria-label="Scoring pass"><button id="wf-p0" aria-pressed="true">Pass 1</button><button id="wf-p1" aria-pressed="false">Pass 2</button></div>
+        </div>
+      </div>
+      <div class="legend"><span><i style="background:var(--gain)"></i>Points gained</span><span><i style="background:var(--loss)"></i>Points lost</span><span><i style="background:var(--ink)"></i>Total</span></div>
+      <div class="wf" id="wf"></div>
+      <p class="hint" id="wf-note" style="margin-top:8px"></p>
+    </div>
+    <div class="box">
+      <h3>Bugs in the 1993 cartridge</h3>
+      <p class="hint">"1993 cartridge" mode reproduces these exactly; "Bugs fixed" mode does what the code clearly meant to do.</p>
+      <ul class="bugs">
+        <li><b>Body weight is ignored.</b> Two comparisons read a memory address instead of the value stored there, so the game always thinks the weight change is small and inside the horse's winning range. Every horse gets the same body-weight bonus.</li>
+        <li><b>Paddock counts 250%.</b> The weight lookup wraps around in 8 bits, so the paddock item reads the wrong slot: its default "100%" is really 250%, and high settings drop to 0–30%. Win odds at the top settings drop to 0–30% too.</li>
+        <li><b>Right-handed dirt is mixed up.</b> The course-record check for right-handed dirt tests for a left-handed race, so at Nakayama or Kyoto dirt nothing counts as "today's course type".</li>
+        <li><b>Under-rated favorite bonus misfires.</b> The +16 bonus for a marked favorite with a low score uses unsigned maths, so horses with negative scores never get it.</li>
+        <li><b>Odds-rank ties.</b> The tie check for popularity ranking always compares the same two middle horses.</li>
+        <li><b>Fresh-horse record.</b> One comparison is the wrong way round, so the best bonus for horses that run well fresh can never be earned.</li>
+        <li><b>Scratched horses</b> are still counted when ranking by odds and body weight, and "Upset brewing!" can never be shown.</li>
+      </ul>
+    </div>
+    <div class="box"><p class="hint">Engine ported from the cartridge's code and checked against the original game running in a recompiled build: 120 randomly generated races, identical scores, rankings, picks and commentary. Unofficial fan project; not affiliated with Asmik.</p></div>
+  </section>
+</main>
+
+<script id="bkv3-data" type="application/json">{"courses": [{"id": "c0", "name": "Tokyo", "dir": 0, "circuits": false, "tips": {"turf-0": "In a fast-paced race, front-runners are at a big disadvantage. For front-runners and stalkers, the key is whether they can get away cleanly without being pressed.", "turf-1": "Few surprises in how the race unfolds; true ability shows. Distance: at 2000m, stalkers drawn wide are at a big disadvantage. Watch out for unfancied horses with a good record.", "turf-2": "Many races start in front of the stands, so horses that get worked up tend to pull hard. Horses that can sit fairly close to the pace have the edge over deep closers.", "dirt-0": "The dirt here is easy to pull out of and the straight is long, so closers win surprisingly often. Closers beaten at Nakayama often improve dramatically here. On a heavy track, front-runners dominate.", "dirt-1": "There aren't many races at this distance. Because it's long, winning from the front is very hard and closers get stronger. Unfancied deep closers ridden without pressure often cause upsets.", "dirt-2": ""}}, {"id": "c1", "name": "Nakayama", "dir": 1, "circuits": true, "tips": {"turf-0": "The straight is short, but deep closers win surprisingly often. If several front-runners look set to push the pace, watch out for closers even when they're unfancied.", "turf-1": "The pace rarely picks up, so horses without the speed to sit handily struggle. Leading all the way is also hard; target horses that settle well.", "turf-2": "The race is usually run at a relaxed pace and gets busy from around the third corner. Few surprises: distance suitability and ability show clearly on this course.", "dirt-0": "In 3-year-old races stalkers rule; without early speed a horse has no chance. For older horses too, early speed is essential. At this distance only, a wide draw is a slight plus.", "dirt-1": "Even an unfancied front-runner is well worth backing if it's the only one in the race. Early speed matters even more than in sprints, but closers that sneak up the inside often run on for 2nd at long odds.", "dirt-2": "Races at this distance are very rare. Leading all the way is tough, but a horse has to keep up with the leaders. Focus on stalkers rather than pure front-runners."}}, {"id": "c2", "name": "Kyoto", "dir": 1, "circuits": true, "tips": {"turf-0": "A fast pace makes life hard for front-runners. Given enough ability, closers win easily on this course whatever the pace.", "turf-1": "Riders are wary of the hill mid-race, so the pace tends to be fairly steady. Even an unfancied horse that gets an easy lead often hangs on to win.", "turf-2": "Horses that make their move early on the third-corner hill often tire in the straight. Whatever the pace, favorites tend to run to their ability on this course.", "dirt-0": "Even at a fairly fast pace, front-runners and stalkers have the edge. Favorites that tend to start slowly or get left behind often run poorly, so be careful.", "dirt-1": "Going too fast from the start fails, and so does relying purely on a late run. Horses that save energy and kick from the back straight often win on sheer power.", "dirt-2": ""}}, {"id": "c3", "name": "Hanshin", "dir": 1, "circuits": false, "tips": {"turf-0": "The course demands power as well as speed. Horses that lose a duel for the lead tire badly. Quite often the race goes to a front-runner and a deep closer.", "turf-1": "The usual pattern is a horse leading at the fourth corner and holding on. Another feature is that times are much slower than at other tracks.", "turf-2": "Front-runners and stalkers have the edge whatever the pace. Even a capable closer struggles unless it's fairly close to the front at the fourth corner.", "dirt-0": "Even at a fast pace, if the leaders get away cleanly the race is decided among them. If it turns into a scramble, though, unfancied closers come into it.", "dirt-1": "The track takes stamina, so horses with nothing but speed struggle. A horse that can sit reasonably close without a sharp kick can power home on this course.", "dirt-2": ""}}, {"id": "c4", "name": "Sapporo", "dir": 1, "circuits": false, "tips": {"turf-0": "The turf takes stamina, so speed alone won't win. Front-runners have the edge, but closers often come into it as rivals; half-hearted stalkers actually have it harder.", "turf-1": "A front-runner that leads alone can survive, but if pressed, the closers sitting just behind pour through. Reading how the race will unfold is the key at this distance.", "turf-2": "The top-rated horse often wins. Upsets are rare; spread bets from the obvious favorite. Even in lower classes, watch out for stalkers.", "dirt-0": "It becomes a battle over the front-runner. Stalkers sitting close often tire, so front-runner/closer bets are good value. Front-runner 1-2 finishes are not that common.", "dirt-1": "In maiden and ¥5M-class races back stalkers; in higher-class races, horses with a proven record are the effective pick. Rather than a front-runner/stalker combo, it's more fun to back a closer with power.", "dirt-2": ""}}, {"id": "c5", "name": "Hakodate", "dir": 1, "circuits": false, "tips": {"turf-0": "Deep closers almost never get there on this course; a horse that takes the lead usually holds on. Only when the track turns bad do closers come into it.", "turf-1": "On a good track closers can do well too, but late in the meeting, once the track deteriorates, stalkers rule. Check the day's track condition before betting.", "turf-2": "Basically the race usually suits closers and stalkers can't hold on, but on a heavy track it often becomes a front-runner 1-2.", "dirt-0": "Front-runners have a high win rate and horses that can't go forward have no chance at all. Judging each horse's early speed is the shortest route to a correct pick.", "dirt-1": "Even if a horse can't keep up early, it must sweep around from the third corner and join the leading group, or it won't get up. Heavy dirt, so power comes first.", "dirt-2": ""}}, {"id": "c6", "name": "Fukushima", "dir": 1, "circuits": false, "tips": {"turf-0": "On this course you must be up front. Coming from far back only works if the leaders collapse. Target stalkers or horses that can chase the leaders.", "turf-1": "Even if the pace looks like picking up, stalkers keep their edge. A horse that can lead alone often hangs on even when unfancied.", "turf-2": "Only 2600m races are run here. The pace is gentle; the usual winner sits 2nd-3rd behind the leader and breaks clear in the straight.", "dirt-0": "Early speed is a must; horses have to push forward even if it costs them. Back horses ridden by bold, attacking jockeys. Upsets are rare.", "dirt-1": "Closing is hard on this dirt, so top-2 finishers usually sit handily and hang on. Even at a fast pace the whole field tires and the leaders survive.", "dirt-2": ""}}, {"id": "c7", "name": "Niigata", "dir": 1, "circuits": true, "tips": {"turf-0": "On the outer circuit the course has a long straight, but it's flat, so stalkers don't stop. However, in big-field higher-class races where the pace rises, closers are the ones to back instead.", "turf-1": "Stalkers are strongest at this distance. Horses within the first five at the third corner, front-runners included, have the best win rate. On the inner circuit stalkers are even more favored.", "turf-2": "", "dirt-0": "At 1000m you must be up front, but 1200m is a distance where closers run on surprisingly well. Versatile horses that can sit just behind the pace probably have the best chance.", "dirt-1": "Whatever the running style, the first requirement is fitting smoothly into the flow of the race. Unfancied stalkers are dangerous; ignore them and you'll often get burned.", "dirt-2": ""}}, {"id": "c8", "name": "Chukyo", "dir": 0, "circuits": false, "tips": {"turf-0": "The pace is often fast, and for such a tight course closers get there fairly often. Races often end with the two extremes: a front-runner and a deep closer.", "turf-1": "It becomes a fight between the leader and the closers. The pace isn't very fast, so the key is to narrow it down from the front-runners and stalkers to the closers.", "turf-2": "Almost always an average-to-slow pace, which favors horses sitting just behind the leader rather than the leader. Upsets are rare at this distance, so bet safely.", "dirt-0": "Early speed is so important that most winners are in the first three at the fourth corner. Leaders often keep going, so pick horses that can reliably sit up front.", "dirt-1": "Closers run on reasonably well, but stalkers still rule. Value lies in bets from a popular stalker to horses likely to push forward at all costs.", "dirt-2": "In any class, a horse that gets an easy lead hangs on unexpectedly well. Such horses are often the ones causing upsets, so always include them as cover."}}, {"id": "c9", "name": "Kokura", "dir": 1, "circuits": false, "tips": {"turf-0": "Leading isn't essential, but a horse needs the early speed to sit 2nd-3rd. The danger is an unfancied front-runner: unmarked horses often lead all the way.", "turf-1": "Even though it's a local track with a short straight, closers often cause upsets at this distance; races are easily close. Look for horses that like flat courses.", "turf-2": "The pace tends to settle at this distance, so keep in mind that stalkers have the edge in long races. The trend is clearer in ¥5M-class races than in higher-class races.", "dirt-0": "A horse has to go forward no matter what; without the drive to take the lead it won't work. A horse with speed can cause an upset even when out of form.", "dirt-1": "Closing from far back is hard; horses must be with the leading group by the fourth corner. Even horses ridden a bit aggressively hang on surprisingly well.", "dirt-2": ""}}, {"id": "c10", "name": "Other", "dir": 1, "circuits": false, "tips": {"turf-0": "", "turf-1": "", "turf-2": "", "dirt-0": "", "dirt-1": "", "dirt-2": ""}}], "races": [{"id": "r0", "name": "Oka Sho (Japanese 1000 Guineas)", "grade": "G1", "course": "c3", "dist": 0, "surface": 0, "dir": 1, "circuit": 2, "age": 1, "sex": 1, "wcond": 0, "tip": "Ignore horses that couldn't win their debut. Last-race form carries straight over, so don't expect out-of-form horses to turn it around. Closers sitting handily are strong.", "lowClass": false, "locked": true}, {"id": "r1", "name": "Satsuki Sho (Japanese 2000 Guineas)", "grade": "G1", "course": "c1", "dist": 1, "surface": 0, "dir": 1, "circuit": 0, "age": 1, "sex": 0, "wcond": 0, "tip": "Horses that ran well in prep races over the same distance, like the Yayoi Sho or Wakaba Stakes, are strong. Horses with a sudden burst of speed often explode from behind, more than the power types.", "lowClass": false, "locked": true}, {"id": "r2", "name": "Tenno Sho (Spring)", "grade": "G1", "course": "c2", "dist": 2, "surface": 0, "dir": 1, "circuit": 1, "age": 2, "sex": 0, "wcond": 0, "tip": "If three or more G1 winners run, an upset is unlikely. Stayers sometimes charge into 2nd, so checking pedigree is essential.", "lowClass": false, "locked": true}, {"id": "r3", "name": "Yasuda Kinen", "grade": "G1", "course": "c0", "dist": 0, "surface": 0, "dir": 0, "circuit": 2, "age": 2, "sex": 0, "wcond": 0, "tip": "This race is run at a fast pace, so many deep closers come charging. A winner of the Keio Hai Spring Cup on good ground has a good chance of finishing top 2.", "lowClass": false, "locked": true}, {"id": "r4", "name": "Yushun Himba (Japanese Oaks)", "grade": "G1", "course": "c0", "dist": 2, "surface": 0, "dir": 0, "circuit": 2, "age": 1, "sex": 1, "wcond": 0, "tip": "Since the Oka Sho moved to Hanshin, the link between the races has grown. Focus on horses coming straight from a high Oka Sho finish; avoid bets made only of improving horses.", "lowClass": false, "locked": true}, {"id": "r5", "name": "Tokyo Yushun (Japanese Derby)", "grade": "G1", "course": "c0", "dist": 2, "surface": 0, "dir": 0, "circuit": 2, "age": 1, "sex": 0, "wcond": 0, "tip": "Distance suitability backed by pedigree is a must. Horses whose breeding doubts 2400m won't make the top 2 in the Derby. Rate Satsuki Sho runners above the trial-race runners.", "lowClass": false, "locked": true}, {"id": "r6", "name": "Takarazuka Kinen", "grade": "G1", "course": "c3", "dist": 1, "surface": 0, "dir": 1, "circuit": 2, "age": 1, "sex": 0, "wcond": 0, "tip": "A race where the top vote-getters in the fan ballot are strong. The Tenno Sho runners clash with the Yasuda Kinen runners; if neither race's winner is running, an upset is possible.", "lowClass": false, "locked": true}, {"id": "r7", "name": "Tenno Sho (Autumn)", "grade": "G1", "course": "c0", "dist": 1, "surface": 0, "dir": 0, "circuit": 2, "age": 1, "sex": 0, "wcond": 0, "tip": "A fast pace favors closers, an average pace favors stalkers; it all depends on the pace. A stalker drawn wide is at a disadvantage for that alone.", "lowClass": false, "locked": true}, {"id": "r8", "name": "Kikuka Sho (Japanese St Leger)", "grade": "G1", "course": "c2", "dist": 2, "surface": 0, "dir": 1, "circuit": 1, "age": 1, "sex": 0, "wcond": 0, "tip": "However strong a horse is, it struggles unless its pedigree can handle the distance. A stayer pedigree needs watching even when unfancied. For autumn improvers, prep-race form is what counts.", "lowClass": false, "locked": true}, {"id": "r9", "name": "Queen Elizabeth II Cup", "grade": "G1", "course": "c2", "dist": 2, "surface": 0, "dir": 1, "circuit": 1, "age": 1, "sex": 1, "wcond": 0, "tip": "Back horses improving in autumn over horses that shone in spring. Horses arriving on a winning streak deserve extra attention. Horses bred for longer distances than the Oaks often come into it.", "lowClass": false, "locked": true}, {"id": "r10", "name": "Mile Championship", "grade": "G1", "course": "c2", "dist": 0, "surface": 0, "dir": 1, "circuit": 1, "age": 1, "sex": 0, "wcond": 0, "tip": "Deep closers look like getting there but don't. Early speed is a must. Horses coming from the autumn Tenno Sho have a better record than Swan Stakes runners.", "lowClass": false, "locked": true}, {"id": "r11", "name": "Japan Cup", "grade": "G1", "course": "c0", "dist": 2, "surface": 0, "dir": 0, "circuit": 2, "age": 1, "sex": 0, "wcond": 0, "tip": "In-form horses from Oceania and America run better than horses with European records. A horse that won a graded race of 2400m+ in its last three starts can't be ignored, even when unfancied.", "lowClass": false, "locked": true}, {"id": "r12", "name": "Hanshin 3yo Stakes", "grade": "G1", "course": "c3", "dist": 0, "surface": 0, "dir": 1, "circuit": 2, "age": 0, "sex": 1, "wcond": 2, "tip": "As a race for 3-year-old fillies, over-trusting the favorites is a mistake. Hanshin's track is heavy, so horses can compete without good times on record. Beware a big run from a deep closer.", "lowClass": false, "locked": true}, {"id": "r13", "name": "Asahi Hai 3yo Stakes", "grade": "G1", "course": "c1", "dist": 0, "surface": 0, "dir": 1, "circuit": 1, "age": 0, "sex": 0, "wcond": 2, "tip": "Winning with one late run down the straight is nearly impossible; without early speed a horse can't compete. Few upsets: horses that have run strong races usually power home.", "lowClass": false, "locked": true}, {"id": "r14", "name": "Sprinters Stakes", "grade": "G1", "course": "c1", "dist": 0, "surface": 0, "dir": 1, "circuit": 1, "age": 1, "sex": 0, "wcond": 0, "tip": "Speed alone won't win. The pace is often furiously fast, and closers that saved energy until the straight run on. Fillies and colts are evenly matched.", "lowClass": false, "locked": true}, {"id": "r15", "name": "Arima Kinen", "grade": "G1", "course": "c1", "dist": 2, "surface": 0, "dir": 1, "circuit": 0, "age": 1, "sex": 0, "wcond": 2, "tip": "With 3-year-olds and older horses mixed, a messy race can bring a huge upset. The top finisher from the Kikuka Sho can be trusted; the top finisher from the Japan Cup is risky.", "lowClass": false, "locked": true}, {"id": "r16", "name": "AJCC (American Jockey Club Cup)", "grade": "G2", "course": "c1", "dist": 1, "surface": 0, "dir": 1, "circuit": 1, "age": 2, "sex": 0, "wcond": 1, "tip": "", "lowClass": false, "locked": true}, {"id": "r17", "name": "Nikkei Shinshun Hai", "grade": "G2", "course": "c2", "dist": 1, "surface": 0, "dir": 1, "circuit": 1, "age": 2, "sex": 0, "wcond": 1, "tip": "", "lowClass": false, "locked": true}, {"id": "r18", "name": "Meguro Kinen", "grade": "G2", "course": "c0", "dist": 2, "surface": 0, "dir": 0, "circuit": 2, "age": 2, "sex": 0, "wcond": 3, "tip": "", "lowClass": false, "locked": true}, {"id": "r19", "name": "Kyoto Kinen", "grade": "G2", "course": "c2", "dist": 2, "surface": 0, "dir": 1, "circuit": 1, "age": 2, "sex": 0, "wcond": 3, "tip": "", "lowClass": false, "locked": true}, {"id": "r20", "name": "Milers Cup", "grade": "G2", "course": "c3", "dist": 0, "surface": 0, "dir": 1, "circuit": 2, "age": 2, "sex": 0, "wcond": 1, "tip": "", "lowClass": false, "locked": true}, {"id": "r21", "name": "Yayoi Sho", "grade": "G2", "course": "c1", "dist": 1, "surface": 0, "dir": 1, "circuit": 0, "age": 1, "sex": 0, "wcond": 2, "tip": "", "lowClass": false, "locked": true}, {"id": "r22", "name": "Nakayama Kinen", "grade": "G2", "course": "c1", "dist": 1, "surface": 0, "dir": 1, "circuit": 0, "age": 2, "sex": 0, "wcond": 1, "tip": "", "lowClass": false, "locked": true}, {"id": "r23", "name": "Hanshin Daishoten", "grade": "G2", "course": "c3", "dist": 2, "surface": 0, "dir": 1, "circuit": 2, "age": 2, "sex": 0, "wcond": 1, "tip": "", "lowClass": false, "locked": true}, {"id": "r24", "name": "Nikkei Sho", "grade": "G2", "course": "c1", "dist": 2, "surface": 0, "dir": 1, "circuit": 0, "age": 2, "sex": 0, "wcond": 1, "tip": "", "lowClass": false, "locked": true}, {"id": "r25", "name": "Hochi Hai (4yo fillies)", "grade": "G2", "course": "c3", "dist": 0, "surface": 0, "dir": 1, "circuit": 2, "age": 1, "sex": 0, "wcond": 0, "tip": "", "lowClass": false, "locked": true}, {"id": "r26", "name": "Spring Stakes", "grade": "G2", "course": "c1", "dist": 1, "surface": 0, "dir": 1, "circuit": 0, "age": 1, "sex": 0, "wcond": 0, "tip": "", "lowClass": false, "locked": true}, {"id": "r27", "name": "Sankei Osaka Hai", "grade": "G2", "course": "c3", "dist": 1, "surface": 0, "dir": 1, "circuit": 2, "age": 2, "sex": 0, "wcond": 1, "tip": "", "lowClass": false, "locked": true}, {"id": "r28", "name": "Keio Hai Spring Cup", "grade": "G2", "course": "c0", "dist": 0, "surface": 0, "dir": 0, "circuit": 2, "age": 2, "sex": 0, "wcond": 1, "tip": "", "lowClass": false, "locked": true}, {"id": "r29", "name": "Sanspo Sho (4yo fillies)", "grade": "G2", "course": "c0", "dist": 1, "surface": 0, "dir": 0, "circuit": 2, "age": 1, "sex": 1, "wcond": 0, "tip": "", "lowClass": false, "locked": true}, {"id": "r30", "name": "NHK Hai", "grade": "G2", "course": "c0", "dist": 1, "surface": 0, "dir": 0, "circuit": 2, "age": 1, "sex": 0, "wcond": 0, "tip": "", "lowClass": false, "locked": true}, {"id": "r31", "name": "NZT 4yo Stakes (New Zealand Trophy)", "grade": "G2", "course": "c0", "dist": 0, "surface": 0, "dir": 0, "circuit": 2, "age": 1, "sex": 0, "wcond": 0, "tip": "", "lowClass": false, "locked": true}, {"id": "r32", "name": "CBC Sho", "grade": "G2", "course": "c8", "dist": 0, "surface": 0, "dir": 0, "circuit": 2, "age": 1, "sex": 0, "wcond": 1, "tip": "", "lowClass": false, "locked": true}, {"id": "r33", "name": "Takamatsunomiya Hai", "grade": "G2", "course": "c8", "dist": 1, "surface": 0, "dir": 0, "circuit": 2, "age": 1, "sex": 0, "wcond": 0, "tip": "", "lowClass": false, "locked": true}, {"id": "r34", "name": "St Lite Kinen", "grade": "G2", "course": "c1", "dist": 1, "surface": 0, "dir": 1, "circuit": 1, "age": 1, "sex": 0, "wcond": 0, "tip": "", "lowClass": false, "locked": true}, {"id": "r35", "name": "Kobe Shimbun Hai", "grade": "G2", "course": "c3", "dist": 0, "surface": 0, "dir": 1, "circuit": 2, "age": 1, "sex": 0, "wcond": 0, "tip": "", "lowClass": false, "locked": true}, {"id": "r36", "name": "Mainichi Okan", "grade": "G2", "course": "c0", "dist": 1, "surface": 0, "dir": 0, "circuit": 2, "age": 1, "sex": 0, "wcond": 0, "tip": "", "lowClass": false, "locked": true}, {"id": "r37", "name": "Kyoto Daishoten", "grade": "G2", "course": "c2", "dist": 2, "surface": 0, "dir": 1, "circuit": 1, "age": 1, "sex": 0, "wcond": 1, "tip": "", "lowClass": false, "locked": true}, {"id": "r38", "name": "Kyoto Shimbun Hai", "grade": "G2", "course": "c2", "dist": 1, "surface": 0, "dir": 1, "circuit": 1, "age": 1, "sex": 0, "wcond": 0, "tip": "", "lowClass": false, "locked": true}, {"id": "r39", "name": "Rose Stakes", "grade": "G2", "course": "c2", "dist": 1, "surface": 0, "dir": 1, "circuit": 1, "age": 1, "sex": 1, "wcond": 0, "tip": "", "lowClass": false, "locked": true}, {"id": "r40", "name": "Swan Stakes", "grade": "G2", "course": "c2", "dist": 0, "surface": 0, "dir": 1, "circuit": 1, "age": 1, "sex": 0, "wcond": 1, "tip": "", "lowClass": false, "locked": true}, {"id": "r41", "name": "Daily Hai 3yo Stakes", "grade": "G2", "course": "c2", "dist": 0, "surface": 0, "dir": 1, "circuit": 1, "age": 0, "sex": 0, "wcond": 2, "tip": "", "lowClass": false, "locked": true}, {"id": "r42", "name": "Keisei Hai 3yo Stakes", "grade": "G2", "course": "c0", "dist": 0, "surface": 0, "dir": 0, "circuit": 2, "age": 0, "sex": 0, "wcond": 2, "tip": "", "lowClass": false, "locked": true}, {"id": "r43", "name": "Argentina Kyowakoku Hai (ARG Cup)", "grade": "G2", "course": "c0", "dist": 2, "surface": 0, "dir": 0, "circuit": 2, "age": 1, "sex": 0, "wcond": 3, "tip": "", "lowClass": false, "locked": true}, {"id": "r44", "name": "Naruo Kinen", "grade": "G2", "course": "c3", "dist": 2, "surface": 0, "dir": 1, "circuit": 2, "age": 1, "sex": 0, "wcond": 3, "tip": "", "lowClass": false, "locked": true}, {"id": "r45", "name": "Other race, 1500+ class", "grade": "1500+", "course": "c0", "dist": 0, "surface": 0, "dir": 1, "circuit": 2, "age": 1, "sex": 0, "wcond": 0, "tip": "", "lowClass": false, "locked": false}, {"id": "r46", "name": "Other race, 900 and under class", "grade": "900-", "course": "c0", "dist": 0, "surface": 0, "dir": 1, "circuit": 2, "age": 1, "sex": 0, "wcond": 0, "tip": "", "lowClass": true, "locked": false}], "jockeys": [{"id": "j0", "name": "Mamoru Ishibashi", "r": [2, 0, 0, 0, 0, 0, 0, 0]}, {"id": "j1", "name": "Hiroyuki Uemura", "r": [2, 0, 0, 0, 0, 0, 1, 1]}, {"id": "j2", "name": "Teruo Eda", "r": [2, 0, 0, 0, 1, 0, 0, 0]}, {"id": "j3", "name": "Seiji Ebisawa", "r": [1, 0, 0, 0, 0, 0, 0, 0]}, {"id": "j4", "name": "Masayoshi Ebina", "r": [3, 0, 0, 0, 0, 0, 0, 1]}, {"id": "j5", "name": "Shoichi Osaki", "r": [3, 1, 0, 0, 1, 0, 1, 0]}, {"id": "j6", "name": "Eizaburo Otsuka", "r": [2, 0, 0, 1, 0, 0, 0, 1]}, {"id": "j7", "name": "Yukio Okabe", "r": [4, 0, 0, 0, 0, 0, 0, 0]}, {"id": "j8", "name": "Jiro Ono", "r": [1, 0, 0, 1, 0, 1, 0, 0]}, {"id": "j9", "name": "Kazuhiro Kato", "r": [3, 0, 0, 0, 0, 1, 0, 0]}, {"id": "j10", "name": "Toru Kawakita", "r": [1, 0, 0, 1, 0, 0, 0, 0]}, {"id": "j11", "name": "Hiroshi Kawachi", "r": [4, 0, 1, 0, 0, 0, 0, 0]}, {"id": "j12", "name": "Takanori Kikuzawa", "r": [2, 1, 0, 0, 1, 0, 1, 0]}, {"id": "j13", "name": "Shigehiko Kishi", "r": [3, 1, 0, 1, 0, 0, 0, 0]}, {"id": "j14", "name": "Shigefumi Kumazawa", "r": [2, 1, 0, 0, 0, 0, 0, 0]}, {"id": "j15", "name": "Hiroshi Gohara", "r": [4, 0, 0, 0, 0, 0, 0, 0]}, {"id": "j16", "name": "Sadahiro Kojima", "r": [3, 1, 0, 0, 0, 0, 0, 1]}, {"id": "j17", "name": "Futoshi Kojima", "r": [3, 1, 0, 0, 0, 0, 1, 0]}, {"id": "j18", "name": "Hiroki Goto", "r": [1, 0, 0, 0, 0, 0, 0, 0]}, {"id": "j19", "name": "Hideo Koyauchi", "r": [3, 1, 0, 0, 1, 0, 0, 0]}, {"id": "j20", "name": "Chiaki Sakai", "r": [2, 1, 0, 0, 0, 0, 0, 0]}, {"id": "j21", "name": "Katsumi Sakamoto", "r": [2, 0, 0, 0, 1, 0, 0, 0]}, {"id": "j22", "name": "Tetsuzo Sato", "r": [2, 1, 0, 0, 1, 0, 0, 0]}, {"id": "j23", "name": "Hirofumi Shii", "r": [1, 0, 0, 0, 0, 0, 0, 0]}, {"id": "j24", "name": "Katsumi Shiomura", "r": [2, 1, 0, 1, 0, 0, 0, 1]}, {"id": "j25", "name": "Masato Shibata", "r": [4, 0, 0, 0, 0, 0, 0, 0]}, {"id": "j26", "name": "Yoshitomi Shibata", "r": [3, 0, 0, 0, 0, 0, 0, 0]}, {"id": "j27", "name": "Eiji Shimizu", "r": [1, 0, 0, 0, 0, 0, 0, 1]}, {"id": "j28", "name": "Masami Sugaya", "r": [3, 0, 0, 0, 1, 0, 0, 0]}, {"id": "j29", "name": "Yutaka Take", "r": [4, 0, 0, 0, 0, 0, 0, 0]}, {"id": "j30", "name": "Nobuyuki Tajima", "r": [3, 1, 0, 0, 0, 0, 0, 1]}, {"id": "j31", "name": "Hidetaka Tadokoro", "r": [1, 0, 0, 1, 0, 0, 0, 0]}, {"id": "j32", "name": "Katsuharu Tanaka", "r": [3, 0, 0, 0, 0, 1, 0, 0]}, {"id": "j33", "name": "Tsuyoshi Tanaka", "r": [1, 0, 0, 1, 0, 0, 0, 0]}, {"id": "j34", "name": "Seiki Tabara", "r": [3, 0, 0, 0, 0, 0, 0, 1]}, {"id": "j35", "name": "Masamitsu Tamura", "r": [1, 0, 0, 0, 0, 0, 0, 0]}, {"id": "j36", "name": "Hiromasa Tamogi", "r": [2, 0, 0, 1, 0, 0, 0, 0]}, {"id": "j37", "name": "Koichi Tsunoda", "r": [3, 1, 0, 0, 0, 1, 0, 0]}, {"id": "j38", "name": "Yukihiro Dohi", "r": [3, 0, 0, 0, 0, 0, 0, 0]}, {"id": "j39", "name": "Eiji Nakadate", "r": [2, 0, 0, 1, 0, 0, 0, 0]}, {"id": "j40", "name": "Katsuichi Nishiura", "r": [2, 0, 0, 0, 0, 0, 0, 0]}, {"id": "j41", "name": "Yasuhiro Nemoto", "r": [1, 0, 1, 0, 0, 0, 0, 0]}, {"id": "j42", "name": "Hiroki Hashimoto", "r": [2, 0, 0, 0, 1, 0, 1, 0]}, {"id": "j43", "name": "Norihisa Hamanoya", "r": [1, 0, 1, 0, 0, 0, 0, 0]}, {"id": "j44", "name": "Shinji Fujita", "r": [3, 0, 1, 0, 0, 0, 0, 1]}, {"id": "j45", "name": "Hideyuki Fujiwara", "r": [1, 0, 0, 0, 0, 0, 0, 0]}, {"id": "j46", "name": "Masaru Honda", "r": [1, 0, 1, 0, 0, 0, 0, 0]}, {"id": "j47", "name": "Masahiro Matsunaga", "r": [2, 0, 1, 0, 0, 0, 0, 0]}, {"id": "j48", "name": "Mikio Matsunaga", "r": [3, 0, 1, 0, 0, 0, 0, 0]}, {"id": "j49", "name": "Tatsuya Matsumoto", "r": [1, 0, 0, 1, 0, 0, 0, 0]}, {"id": "j50", "name": "Hitoshi Matoba", "r": [4, 0, 0, 0, 0, 0, 0, 0]}, {"id": "j51", "name": "Takahiro Mizuno", "r": [1, 1, 0, 0, 0, 0, 0, 0]}, {"id": "j52", "name": "Katsumi Minai", "r": [4, 0, 1, 0, 0, 0, 0, 0]}, {"id": "j53", "name": "Yoshinori Muto", "r": [1, 0, 0, 0, 0, 0, 0, 0]}, {"id": "j54", "name": "Yoshiyuki Muramoto", "r": [3, 0, 0, 0, 0, 0, 1, 0]}, {"id": "j55", "name": "Takayuki Yasuda", "r": [2, 0, 0, 0, 0, 0, 0, 0]}, {"id": "j56", "name": "Tomio Yasuda", "r": [3, 0, 1, 0, 0, 0, 0, 0]}, {"id": "j57", "name": "Yasuhiko Yasuda", "r": [2, 0, 1, 0, 1, 0, 0, 0]}, {"id": "j58", "name": "Taisei Yamada", "r": [1, 1, 0, 1, 0, 0, 0, 0]}, {"id": "j59", "name": "Norihiro Yokoyama", "r": [3, 0, 0, 0, 1, 0, 1, 0]}, {"id": "j60", "name": "Other jockey", "r": [0, 0, 0, 0, 0, 0, 0, 0]}], "rules": [{"course": "c0", "surface": "turf", "dist": [0, 1, 2], "circuit": "any", "target": [2, 3], "pts": 1, "src": "P15"}, {"course": "c0", "surface": "turf", "dist": [0, 1], "circuit": "any", "target": "inside", "pts": 1, "src": "R03"}, {"course": "c0", "surface": "turf", "dist": [1, 2], "circuit": "any", "target": "outside", "pts": 1, "src": "R04"}, {"course": "c0", "surface": "dirt", "dist": [0, 1, 2], "circuit": "any", "target": "inside", "pts": 1, "src": "R05"}, {"course": "c1", "surface": "turf", "dist": [0, 1, 2], "circuit": "any", "target": [2], "pts": -1, "src": "P16"}, {"course": "c2", "surface": "turf", "dist": [0], "circuit": "inner", "target": [1], "pts": 1, "src": "P17"}, {"course": "c2", "surface": "turf", "dist": [0], "circuit": "inner", "target": "outside", "pts": 1, "src": "R06"}, {"course": "c2", "surface": "turf", "dist": [1, 2], "circuit": "inner", "target": [1], "pts": 1, "src": "P18"}, {"course": "c3", "surface": "turf", "dist": [0, 1, 2], "circuit": "any", "target": "inside", "pts": 1, "src": "R07"}, {"course": "c3", "surface": "turf", "dist": [0, 1, 2], "circuit": "any", "target": [1, 3], "pts": 1, "src": "P19"}, {"course": "c8", "surface": "dirt", "dist": [1], "circuit": "any", "target": "inside", "pts": 1, "src": "R08"}, {"course": "c8", "surface": "turf", "dist": [1], "circuit": "any", "target": [1], "pts": 1, "src": "P20"}, {"course": "c8", "surface": "dirt", "dist": [0, 2], "circuit": "any", "target": "inside", "pts": 1, "src": "R09a"}, {"course": "c8", "surface": "dirt", "dist": [0, 2], "circuit": "any", "target": "outside", "pts": 1, "src": "R09b"}, {"course": "c8", "surface": "dirt", "dist": [0, 2], "circuit": "any", "target": [1], "pts": 1, "src": "P21"}, {"course": "c8", "surface": "turf", "dist": [0, 1, 2], "circuit": "any", "target": "outside", "pts": 1, "src": "R10"}, {"course": "c8", "surface": "turf", "dist": [0, 1, 2], "circuit": "any", "target": [1, 3], "pts": 1, "src": "P22"}, {"course": "c4", "surface": "turf", "dist": [0, 1, 2], "circuit": "any", "target": [1, 3], "pts": 1, "src": "P23"}, {"course": "c5", "surface": "turf", "dist": [0, 1, 2], "circuit": "any", "target": [1, 3], "pts": 1, "src": "P24"}, {"course": "c6", "surface": "turf", "dist": [0, 1, 2], "circuit": "any", "target": "inside", "pts": 1, "src": "R11"}, {"course": "c6", "surface": "turf", "dist": [0, 1, 2], "circuit": "any", "target": [1, 3], "pts": 1, "src": "P25"}, {"course": "c7", "surface": "turf", "dist": [0], "circuit": "any", "target": [2], "pts": 1, "src": "P26"}, {"course": "c7", "surface": "turf", "dist": [0], "circuit": "any", "target": [3], "pts": 1, "src": "P27"}, {"course": "c7", "surface": "turf", "dist": [0, 1, 2], "circuit": "inner", "target": [1], "pts": 1, "src": "P28"}, {"course": "c7", "surface": "turf", "dist": [0, 1, 2], "circuit": "outer", "target": [2], "pts": 1, "src": "P29"}, {"course": "c9", "surface": "turf", "dist": [1], "circuit": "any", "target": [2], "pts": 1, "src": "P30"}, {"course": "c9", "surface": "turf", "dist": [0, 2], "circuit": "any", "target": [0, 1], "pts": 1, "src": "P31"}, {"course": "any", "surface": "any", "dist": [0], "circuit": "any", "target": [2], "pts": 1, "src": "P32"}, {"course": "any", "surface": "any", "dist": [2], "circuit": "any", "target": "lone", "pts": 1, "src": "R12"}, {"course": "any", "surface": "any", "dist": [0, 1, 2], "circuit": "any", "target": "lone", "pts": 1, "src": "R13"}]}</script>
+<script>/* Bakenoh V3 prediction engine — a port of the Game Boy code (bank 1, 01:5800..7800).
+   Integer maths follows the original: truncating division, 16-bit score words.
+   opts.fixBugs = false reproduces the shipped cartridge, bugs included. */
+(function (root) {
+'use strict';
+
+const W_MAIN = [0, 10, 20, 30, 60, 100, 120, 150, 200, 250, 300];
+const W_ALT_KEY = [100, 120, 140, 160, 180, 200, 220, 240, 260, 280, 300];
+const W_ALT = [0, 0, 0, 0, 0, 0, 0, 0, 10, 10, 10];
+const ITEMS = ['Sex & age', 'Running style', 'Jockey', 'Prediction marks', 'Heavy-track record', 'Distance record',
+  'Course record', 'Racecourse record', 'Recent form', 'Body weight', 'Training', 'Win odds', 'Paddock'];
+
+// recent form tables (rows: G1,G2,G3,OP,1500,900,500,Maiden,Debut,Other,Layoff)
+const T1 = [[6000,4000,2500,1500,750,500,375],[4500,3125,2250,1250,625,400,200],[3500,2625,1750,875,500,300,175],
+  [2125,1500,1000,500,300,175,100],[1000,500,375,250,125,85,50],[450,250,175,100,50,40,25],[225,125,75,40,25,20,15],
+  [100,65,35,20,15,10,5],[100,65,25,10,5,5,0],[100,65,35,20,15,10,5],[5,5,5,5,5,5,5]];
+const T1A = [[6000,4000,2500,250,150,100,50],[4500,3125,2250,225,125,75,40],[3500,2625,1750,185,100,50,25],
+  [2125,1500,1000,100,50,25,15],[1000,500,375,25,15,5,0],[450,250,175,15,5,0,0],[225,125,75,10,0,0,0],
+  [100,65,35,10,0,0,0],[100,65,25,5,0,0,0],[100,65,35,15,5,0,0],[5,5,5,5,5,5,5]];
+const T2 = [[6000,4000,2500,1500,750,500,375,175],[4500,3125,2250,1250,625,400,200,135],[3500,2625,1750,875,500,300,175,75],
+  [2125,1500,1000,500,300,175,100,35],[1000,500,375,250,125,85,50,20],[450,250,175,100,50,40,25,10],[225,125,75,40,25,20,15,5],
+  [100,65,35,20,15,10,5,0],[100,65,25,10,5,5,0,0],[100,65,35,20,15,10,5,0],[5,5,5,5,5,5,5,5]];
+const T2A = [[6000,4000,2500,250,200,150,100,50],[4500,3125,2250,225,150,100,50,25],[3500,2625,1750,185,100,50,25,10],
+  [2125,1500,1000,100,50,25,10,5],[1000,500,375,25,10,5,0,0],[450,250,175,15,5,0,0,0],[225,125,75,10,0,0,0,0],
+  [100,65,35,10,0,0,0,0],[100,65,25,5,0,0,0,0],[100,65,35,10,5,0,0,0],[5,5,5,5,5,5,5,5]];
+const T3 = [[6000,5000],[4500,4000],[3500,3125],[2125,1875],[1000,750],[450,350],[225,200],[100,75],[100,75],[100,75],[5,5]];
+const M3 = [1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0];
+const M2 = [0,1,1,2,2,3,3,4,4,5,5,6,6,6,7,7];
+const FORM_DIV = [1, 11, 13, 15, 17];
+// sex/age table 6189: [dist][ageIdx 0..5][male p0, male p1, female p0, female p1]
+const SEXAGE = [
+  [[0,0,0,0],[1,0,1,0],[2,1,2,1],[1,2,1,2],[0,1,0,1],[-1,0,-1,0]],
+  [[0,0,0,-1],[1,0,0,-1],[2,1,1,0],[1,2,0,1],[0,1,-1,0],[-1,0,-2,-1]],
+  [[1,1,0,-1],[2,1,0,-1],[3,2,1,0],[2,3,0,1],[1,2,-1,0],[0,1,-2,-1]]];
+const HEAVY_T = [[0,-1,-2,-2,-3,-3,-5,-5,-8,-8,-8,-8,-8,-8,-8,-8],[0,0,-1,-1,-2,-2,-3,-3,-4,-4,-4,-4,-4,-4,-4,-4]];
+const BODY_T = { // [openPlus][bigChange][outsideRange] -> [p0,p1]
+  1: { 0: { 0: [3, 2], 1: [-3, -5] }, 1: { 0: [5, 3], 1: [-5, -8] } },
+  0: { 0: { 0: [2, 1], 1: [-1, -3] }, 1: { 0: [2, 1], 1: [-2, -4] } } };
+const PAIRS = [[1,2],[1,3],[1,4],[1,5],[1,6],[2,3],[2,4],[2,5],[2,6],[3,4],[3,5],[3,6],[4,5],[4,6],[5,6]];
+const BRACKETS = {
+  9: [1,2,3,4,5,6,7,8,8], 10: [1,2,3,4,5,6,7,7,8,8], 11: [1,2,3,4,5,6,6,7,7,8,8], 12: [1,2,3,4,5,5,6,6,7,7,8,8],
+  13: [1,2,3,4,4,5,5,6,6,7,7,8,8], 14: [1,2,3,3,4,4,5,5,6,6,7,7,8,8], 15: [1,2,2,3,3,4,4,5,5,6,6,7,7,8,8],
+  16: [1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8], 17: [1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,8], 18: [1,1,2,2,3,3,4,4,5,5,6,6,7,7,7,8,8,8] };
+const HEADLINES = ['Wide open!', 'Neck and neck!', 'As expected!', "The favorite's race!", 'A safe bet!', 'Upset brewing!'];
+const HEAD_BODY = [
+  'There is no big gap in ability between the horses. Every horse has a chance.',
+  'It looks like a three-way battle between the top three.',
+  'Expect a predictable race built around the most capable horses.',
+  'It looks likely to be decided between the two highest-rated horses.',
+  'The top horse is far stronger than the rest of the field.',
+  'No horse stands out, so expect a rough race.'];
+const CONNECT = { D: 'Therefore,', K: 'That said,', S: 'But if the favorite stumbles,' };
+const CONNECT_T = [['K','D','D','D','D','K'],['K','D','D','D','D','K'],['D','S','S','S','S','D'],['K','K','D','D','D','K']];
+const FOLLOW = ["don't expect a big payout; that's not how this race will go.",
+  "a big payout is unlikely; it should follow the favorite's line.",
+  'a high-paying combination is entirely possible.',
+  "even with an upset, don't expect a very big payout."];
+
+const tdiv = (a, b) => (b === 0 ? 0 : Math.trunc(a / b));
+const s16 = v => ((v & 0xFFFF) ^ 0x8000) - 0x8000;
+const sum4 = c => c[0] + c[1] + c[2] + c[3];
+const wsum = c => 5000 * c[0] + 2500 * c[1] + 1000 * c[2] + 250 * c[3];
+
+function selSort(keys, ids, n, better) {
+  for (let i = 0; i < n; i++) {
+    let b = i;
+    for (let j = i; j < n; j++) if (better(keys[j], keys[b])) b = j;
+    [keys[i], keys[b]] = [keys[b], keys[i]]; [ids[i], ids[b]] = [ids[b], ids[i]];
+  }
+}
+
+function predict(race, horses, cfg, data, opts) {
+  opts = opts || {};
+  const fix = !!opts.fixBugs;
+  const N = horses.length;                       // entered runners (C4FB during scoring)
+  const active = horses.filter(h => !h.scratched).length;
+  const simple = !!cfg.simple;
+  const q = cfg.questions;                       // true = item is asked
+  const jockeyById = Object.fromEntries(data.jockeys.map(j => [j.id, j.r]));
+  const alt = !!race.lowClass || horses.some(h => h.age === 0);
+  const today = 2 * race.dir + race.surface;
+  const layoff = h => h.form[3].c === 10;
+
+  function pct(item) {
+    const lvl = cfg.weights[item];
+    let off = 2 * lvl + 22 * item;
+    if (!fix) off &= 0xFF;
+    const row = Math.floor(off / 22), col = (off % 22) / 2;
+    if (alt) return (row === 2 || row === 3 || row === 11) ? W_ALT_KEY[col] : W_ALT[col];
+    return W_MAIN[col];
+  }
+
+  function runPass(pass) {
+    const score = new Array(N).fill(0);
+    const parts = horses.map(() => ({}));
+    let scale = 10;
+    const credit = (i, key, v) => { parts[i][key] = (parts[i][key] || 0) + v; };
+    const addRaw = (i, key, v) => { score[i] = s16(score[i] + v); credit(i, key, v); };
+    const add = (i, key, E, item) => addRaw(i, key, tdiv(s16(E * scale) * pct(item), 100));   // 6A90
+    const addU = (i, key, E) => addRaw(i, key, s16(E * scale));                               // 6AD4
+    const addD = (i, key, E) => addU(i, key, pass ? 2 * E : E);                              // 6AC1
+    const addWD = (i, key, E, item) => add(i, key, pass ? 2 * E : E, item);                  // 6A87
+
+    // ---- base score 6B09 ----
+    const recScore = (cells, item) => {
+      const n = sum4(cells) & 0xFF, dv = (2 * n + 9) & 0xFF;
+      const v = dv === 9 ? 15 : Math.floor(wsum(cells) / dv);
+      return tdiv(v * pct(item), 100);
+    };
+    const base = horses.map(h => {
+      let dist = 0;
+      if (q.distance) {
+        if (simple || pass === 0) dist = recScore(h.distRec[race.dist], 5);
+        else dist = Math.floor((recScore(h.distRec[0], 5) + recScore(h.distRec[1], 5) + recScore(h.distRec[2], 5)) / 3);
+      }
+      let sum = 0;
+      for (let k = 0; k < 4; k++) {
+        const r = h.form[k]; let c = r.c, fA = r.f;
+        if (k < 3 && c >= 5 && c <= 9 && h.form[k + 1].c < c && h.form[k + 1].f === 0) { c = h.form[k + 1].c; if (c !== 8) fA = 1; }
+        const d = (r.c === 8 && r.f !== 0) ? 3 : 2;
+        const A = (alt ? T1A : T1)[c][Math.min(fA, 6)];
+        const B = r.f === 0 ? T3[c][M3[r.m]] : (alt ? T2A : T2)[c][M2[r.m]];
+        sum += Math.floor(A / d) + Math.floor(B / d);
+      }
+      const cnt = h.form.filter(r => r.c !== 10).length;
+      const form = tdiv(Math.floor(sum / FORM_DIV[cnt]) * pct(8), 100);
+      return { dist, form, total: ((dist + form) & 0xFFFF) >> 1 };
+    });
+    const S = base.reduce((a, b) => a + b.total, 0);
+    scale = Math.max(10, Math.floor(Math.floor(S / N) / 9));
+    for (let i = 0; i < N; i++) {
+      if (pass === 0) { score[i] = s16(base[i].total); parts[i]['Base: distance record'] = base[i].dist >> 1; parts[i]['Base: recent form'] = base[i].total - (base[i].dist >> 1); }
+    }
+
+    // ---- per-horse factors P00..P33 ----
+    for (let i = 0; i < N; i++) {
+      const h = horses[i];
+      // P00 heavy-track record
+      if (q.distance && (race.surface ? cfg.track === 3 : cfg.track >= 2)) {
+        const c = h.distRec[3], n = sum4(c);
+        if (n === 0) add(i, 'Heavy-track record', [-3, -1][pass], 4);
+        else {
+          const v = Math.floor(Math.floor(wsum(c) / (2 * n + 9)) / [3, 5][pass]);
+          if (c[0] | c[1] | c[2]) addRaw(i, 'Heavy-track record', tdiv(s16(v) * pct(4), 100));
+          else add(i, 'Heavy-track record', HEAVY_T[pass][Math.min(c[3], 15)], 4);
+        }
+      }
+      // P01 course record
+      if (q.course) {
+        const [dm, dx] = pass ? [2, 5] : [4, 10];
+        for (let g = 0; g < 4; g++) {
+          const c = h.courseRec[g], v = Math.floor(wsum(c) / (2 * sum4(c) + 9));
+          let div;
+          // original bug (01:66AD): the right-dirt group tests for a LEFT-handed dirt race
+          const isToday = (!fix && g === 3) ? (race.surface === 1 && race.dir === 0) : g === today;
+          if (isToday) div = dm; else if (simple) continue; else div = dx;
+          addRaw(i, 'Course record', tdiv(s16(Math.floor(v / div)) * pct(6), 100));
+        }
+      }
+      // P02 racecourse record
+      if (q.track) {
+        const c = h.trackRec, v = Math.floor(Math.floor(wsum(c) / (2 * sum4(c) + 9)) / [10, 5][pass]);
+        addRaw(i, 'Racecourse record', tdiv(s16(v) * pct(7), 100));
+      }
+      // P03 training
+      if (q.training) {
+        add(i, 'Training', [[-3, -1, 0, 1, 3], [-8, -3, 0, 3, 8]][pass][h.training], 10);
+        if (layoff(h)) add(i, 'Training', [[-3, -1, 0, 0, 0], [-6, -3, -1, 0, 0]][pass][h.training], 10);
+      }
+      // P04 fresh (first run after a layoff) record
+      if (!simple && q.fresh && layoff(h)) {
+        const [a, b, c, d] = h.freshRec;
+        if (((a | b | c) === 0) && d) addU(i, 'Fresh record', [-2, -5][pass]);
+        else {
+          const n = a + b + c + d;
+          const div8 = x => (n === 0 ? 0xFF : Math.floor(x / n) & 0xFF);
+          const rw = div8(20 * a), rt = div8(20 * a + 10 * b + 5 * c), ro = div8(10 * d);
+          const x = fix ? (rt - rw) & 0xFF : (rw - rt) & 0xFF;   // fix: compare place-rate with win-rate the intended way round
+          let e = (x & 0x80) ? [0, 0] : x < 10 ? [0, 1] : x < 20 ? [1, 2] : [2, 5];
+          addU(i, 'Fresh record', e[pass]);
+          const y = (rt - ro) & 0xFF;
+          e = (y & 0x80) ? [-1, -3] : y < 10 ? [0, 0] : y < 20 ? [1, 2] : [2, 4];
+          addU(i, 'Fresh record', e[pass]);
+        }
+      }
+      // P05-P07 paddock
+      if (!simple && q.paddock) {
+        add(i, 'Paddock', [[-1, 0, 1], [-3, 0, 3]][pass][h.excite], 12);
+        add(i, 'Paddock', [[-1, 0, -1], [-3, 0, -3]][pass][h.sweat], 12);
+        add(i, 'Paddock', [[-1, 0, 1], [-3, 0, 3]][pass][h.coat], 12);
+      }
+      // P08 weight carried in handicaps
+      if (!simple && race.wcond === 3) {
+        const a = h.weight - 56;
+        if (a >= 0) addU(i, 'Weight carried', pass ? a : a >> 1);
+      }
+      // P09 prediction marks
+      if (q.marks) add(i, 'Prediction marks', [[-1, 3, 2, 1, 0], [0, 1, 1, 1, 1]][pass][h.mark], 3);
+      // P10 sex & age
+      if (!simple && q.sexage) add(i, 'Sex & age', SEXAGE[race.dist][Math.min(h.age, 5)][2 * h.sex + pass], 0);
+      // P11 best distance, P12 best course (no question check in the original)
+      const bestOf = (groups, item, target, bug) => {
+        const val = c => { const n = sum4(c) & 0xFF, dv = (2 * n + 9) & 0xFF; return tdiv((dv === 9 ? 15 : Math.floor(wsum(c) / dv)) * pct(item), 100); };
+        const v = groups.map(val);
+        let best = 0, m = v[0];
+        for (let g = 1; g < v.length; g++) if (m < v[g]) { best = g; if (!(bug && g === 3)) m = v[g]; }
+        if (m === 15) return null;
+        return [2, -1, 4, -2][2 * pass + (target !== best ? 1 : 0)];
+      };
+      let e = bestOf(h.distRec.slice(0, 3), 5, race.dist, false);
+      if (e !== null) add(i, 'Best distance', e, 5);
+      e = bestOf(h.courseRec, 6, today, !fix);
+      if (e !== null) add(i, 'Best course type', e, 6);
+      // P13 jockey
+      const jr = jockeyById[h.jockey] || [0, 0, 0, 0, 0, 0, 0, 0];
+      add(i, 'Jockey', jr[0], 2);
+      if (race.surface === 0) add(i, 'Jockey', jr[1], 2); else add(i, 'Jockey', jr[2], 2);
+      if (h.style === 0 || h.style === 1) add(i, 'Jockey', jr[3], 2);
+      if (h.style === 2 || h.style === 3) add(i, 'Jockey', jr[4], 2);
+      add(i, 'Jockey', jr[5 + race.dist], 2);
+      // P14 body weight
+      if (!simple && q.body) {
+        const openPlus = h.form.some(r => r.c < 4) ? 1 : 0;
+        let big = 0, outside = 0;
+        if (fix) {
+          if (h.bwToday && h.bwLast) big = Math.abs(h.bwToday - h.bwLast) >= 10 ? 1 : 0;
+          if (h.bwToday && h.bwLow && h.bwHigh) outside = (h.bwLow > h.bwToday || h.bwHigh < h.bwToday) ? 1 : 0;
+        }
+        add(i, 'Body weight', BODY_T[openPlus][big][outside][pass], 9);
+      }
+      // P15-P32 course bias rules (style rules)
+      for (const ru of data.rules) {
+        if (Array.isArray(ru.target) && ruleMatches(ru, race) && ru.target.includes(h.style)) addD(i, 'Course bias', ru.pts);
+      }
+      // P33 handicap on soft ground, 40 kg
+      if (!simple && race.wcond === 3 && cfg.track >= 2 && h.weight === 40) addU(i, 'Weight carried', 1);
+    }
+
+    // ---- race-wide passes ----
+    const odds = horses.map(h => h.odds);
+    const pool = fix ? horses.map((h, i) => i).filter(i => !horses[i].scratched) : horses.map((h, i) => i);
+    const Np = pool.length;
+    // R00 popularity spread (pass 0 only)
+    if (pass === 0) {
+      const k = pool.map(i => odds[i]), ids = pool.slice();
+      selSort(k, ids, Np, (a, b) => a < b);
+      const m = Np - Math.floor(Np / 2) - 1, s = Np - Math.floor(Np / 2);
+      let j = 0, tie = m > 0 && k[m] === k[m - 1];
+      for (let p = m; p >= 0; p--) { add(ids[p], 'Popularity', j, 11); if (fix ? !(p > 0 && k[p] === k[p - 1]) : !tie) j++; }
+      j = 0; tie = s + 1 < Np && k[s] === k[s + 1];
+      for (let p = s; p < Np; p++) { add(ids[p], 'Popularity', -j, 11); if (fix ? !(p + 1 < Np && k[p] === k[p + 1]) : !tie) j++; }
+    }
+    // R01 big-field draw penalty
+    const A = active - 12;
+    if (A >= 0) {
+      const e1 = [-1, -1, -1, -2, -2, -3, -3][A], e2 = [-1, -1, -1, -1, -2, -2, -2][A];
+      for (const i of [0, 1, N - 1, N - 2]) if (i >= 0 && i < N) addU(i, 'Draw (field size)', e1);
+      for (const i of [2, 3, N - 3, N - 4]) if (i >= 0 && i < N) addU(i, 'Draw (field size)', e2);
+    }
+    // R02 light horses on firm dirt
+    if (q.body && race.surface === 1 && cfg.track < 2) {
+      const k = pool.map(i => horses[i].bwToday), ids = pool.slice();
+      selSort(k, ids, Np, (a, b) => a < b);
+      if (k[0] !== 0) for (let p = 0; p < 5 && p < Np; p++) add(ids[p], 'Light horse on fast dirt', [[-4, -3, -2, -1, 0], [-8, -6, -4, -2, -1]][pass][p], 9);
+    }
+    // R03-R11 draw rules, R12/R13 lone front-runner
+    const fronts = horses.map((h, i) => i).filter(i => horses[i].style === 0);
+    for (const ru of data.rules) {
+      if (Array.isArray(ru.target) || !ruleMatches(ru, race)) continue;
+      if (ru.target === 'inside') for (const i of [0, 1, 2]) if (i < N) addD(i, 'Course bias', ru.pts);
+      if (ru.target === 'outside') for (const i of [N - 1, N - 2, N - 3]) if (i >= 0) addD(i, 'Course bias', ru.pts);
+      if (ru.target === 'lone' && fronts.length === 1) addD(fronts[0], 'Lone front-runner', ru.pts);
+    }
+    // R14 ◎ and ○ share a running style
+    const b = horses.findIndex(h => h.mark === 1), c = horses.findIndex(h => h.mark === 2);
+    if (b >= 0 && c >= 0 && horses[b].style === horses[c].style) { addWD(b, 'Marks clash', -1, 1); addWD(c, 'Marks clash', -1, 1); }
+    // R15 outsider front-runners on soft ground
+    if (!simple && cfg.track >= 2) {
+      const k = pool.map(i => odds[i]), ids = pool.slice();
+      selSort(k, ids, Np, (a, b) => a < b);
+      for (let p = 5; p < Np; p++) if (horses[ids[p]].style === 0) addU(ids[p], 'Front-runner on soft ground', 1);
+    }
+    // R16 underrated marked favorites
+    {
+      let T;
+      if (fix) { const sum = pool.reduce((a, i) => a + score[i], 0); T = Math.trunc(Math.trunc(sum / Np) / 4) * 3; }
+      else { const sum = score.reduce((a, v) => a + v, 0) & 0xFFFFFF; T = ((Math.floor(Math.floor(sum / N) / 4)) & 0xFFFF) * 3 & 0xFFFF; }
+      for (let i = 0; i < N; i++) {
+        const sc = fix ? score[i] : score[i] & 0xFFFF;
+        if (sc < T && odds[i] < 51 && (horses[i].mark === 1 || horses[i].mark === 2)) addU(i, 'Underrated favorite', 16);
+      }
+    }
+
+    // ---- finalize 752A ----
+    const keep = horses.map((h, i) => i).filter(i => !horses[i].scratched);
+    const keys = keep.map(i => (score[i] + 0x8000) & 0xFFFF), ids = keep.slice();
+    selSort(keys, ids, keys.length, (a, b) => a > b);
+    return { scale, base, score, parts, order: ids, sorted: keys.map(k => k - 0x8000) };
+  }
+
+  const p0 = runPass(0), p1 = runPass(1);
+
+  // ---- commentary 5B57 ----
+  const s = p0.sorted;
+  let cat = 0;
+  if (s.length >= 2) {
+    const t5 = Math.trunc(s[0] / 5), thr = s[0] - t5;
+    let C = 0; for (let k = 1; k < s.length && s[k] >= thr; k++) C++;
+    const s3 = s.length >= 3 ? s[2] : -Infinity;
+    if (C >= 6) cat = 0; else if (C >= 3) cat = 1; else if (s[1] - t5 < s3) cat = 2;
+    else if (C === 0 && s[1] <= s[0] - 2 * t5) cat = 4; else cat = 3;
+  }
+
+  // ---- picks 590A/5AE8 ----
+  const rnd = o => Math.floor(o / 10) + ((o % 10) >= 5 ? 1 : 0);
+  const odds = horses.map(h => h.odds);
+  const LIM = active >= 11 ? [[14, 5, 8, 2], [10, 4, 6, 1]] : [[12, 4, 6, 1], [8, 3, 4, 0]];
+  const L = LIM[cfg.narrow ? 1 : 0];
+  const picks = []; let total = 0, favCount = 0;
+  function collect(rec, ids, lo, hi, needLong) {
+    for (const [r1, r2] of PAIRS) {
+      if (ids.length < r1 || ids.length < r2) continue;
+      const a = ids[r1 - 1], b = ids[r2 - 1];
+      if (needLong && (odds[a] < 100 || odds[b] < 100)) continue;
+      let p = rnd(odds[a]) * rnd(odds[b]); if (p > 0xFFFF) p = 0xFFFE;
+      if (p >= lo && p < hi) rec.push({ p, a, b });
+    }
+  }
+  function accept(catIdx, rec) {
+    const k = rec.map(r => r.p), ids = rec.map((r, j) => j);
+    if (rec.length >= 2) selSort(k, ids, rec.length, (a, b) => a < b);
+    let n = 0;
+    for (const j of ids) {
+      const { a, b, p } = rec[j];
+      if (total >= L[0] || n >= L[1 + catIdx]) continue;
+      const lo = Math.min(a, b), hi = Math.max(a, b);
+      if (picks.some(x => x.lo === lo && x.hi === hi)) continue;
+      picks.push({ lo, hi, cat: catIdx, product: p }); total++; n++;
+    }
+  }
+  let rec = []; collect(rec, p0.order, 0, 36); accept(0, rec);
+  favCount = Math.min(total, 6);
+  rec = []; collect(rec, p0.order, 30, 201); collect(rec, p1.order, 30, 201); accept(1, rec);
+  rec = []; collect(rec, p0.order, 201, 0xFFFF, true); collect(rec, p1.order, 201, 0xFFFF, true); accept(2, rec);
+
+  // brackets
+  let bracketPicks;
+  if (N <= 8) bracketPicks = picks.map(p => ({ lo: p.lo + 1, hi: p.hi + 1, cat: p.cat }));
+  else {
+    const map = BRACKETS[N]; bracketPicks = [];
+    for (const p of picks) {
+      const lo = map[p.lo], hi = map[p.hi];
+      if (!bracketPicks.some(x => x.lo === lo && x.hi === hi)) bracketPicks.push({ lo, hi, cat: p.cat });
+    }
+  }
+
+  const x = Math.min(total - favCount, 5), k = [0, 1, 2, 2, 3, 3][x];
+  const commentary = { cat, headline: HEADLINES[cat], body: HEAD_BODY[cat], connector: CONNECT[CONNECT_T[k][cat]], follow: FOLLOW[k] };
+
+  const weightsUsed = ITEMS.map((n, i) => ({ item: n, pct: pct(i) }));
+  return { pass0: p0, pass1: p1, picks, bracketPicks, favCount, commentary, alt, weightsUsed, active };
+}
+
+function ruleMatches(ru, race) {
+  if (ru.course !== 'any' && ru.course !== race.course) return false;
+  if (ru.surface !== 'any' && (ru.surface === 'turf' ? 0 : 1) !== race.surface) return false;
+  if (!ru.dist.includes(race.dist)) return false;
+  if (ru.circuit === 'inner' && race.circuit !== 0) return false;
+  if (ru.circuit === 'outer' && race.circuit === 0) return false;
+  return true;
+}
+
+const api = { predict, ruleMatches, ITEMS, W_MAIN, BRACKETS };
+if (typeof module !== 'undefined') module.exports = api; else root.BKV3 = api;
+})(this);
+</script>
+<script>
+(function () {
+'use strict';
+const $ = s => document.querySelector(s), $$ = s => Array.from(document.querySelectorAll(s));
+const ROM = JSON.parse(document.getElementById('bkv3-data').textContent);
+const clone = o => JSON.parse(JSON.stringify(o));
+const store = {
+  get(k) { try { const v = localStorage.getItem('bkv3.' + k); return v ? JSON.parse(v) : null; } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem('bkv3.' + k, JSON.stringify(v)); } catch (e) {} }
+};
+const STYLES = ['Front-runner (逃げ)', 'Stalker (先行)', 'Closer (差し)', 'Deep closer (追込)', 'Versatile (自在)'];
+const STYLE_SHORT = ['Front', 'Stalker', 'Closer', 'Deep closer', 'Versatile'];
+const MARKS = ['–', '◎', '○', '△', '×'];
+const MARK_NAMES = ['No mark', '◎ Top pick', '○ Second pick', '△ Outside chance', '× Ignore'];
+const CLASSES = ['G1', 'G2', 'G3', 'Open', '¥15M class', '¥9M class', '¥5M class', 'Maiden', 'Debut', 'Other', 'Layoff (no race)'];
+const TRAIN = ['Very poor', 'Poor', 'Average', 'Good', 'Very good'];
+const EXCITE = ['Worked up', 'Normal', 'Arched neck (keen)'], SWEAT = ['Heavy', 'A little', 'None'], COAT = ['Dull', 'Normal', 'Glossy'];
+const RECROWS = ['1st', '2nd', '3rd', 'Unplaced'];
+const QUESTIONS = [['sexage', 'Sex & age'], ['distance', 'Distance record'], ['course', 'Course record'], ['track', 'Racecourse record'],
+  ['fresh', 'Record when fresh'], ['training', 'Training'], ['body', 'Body weight'], ['marks', 'Prediction marks'], ['paddock', 'Paddock']];
+
+let lib = store.get('lib') || { courses: ROM.courses, jockeys: ROM.jockeys, races: ROM.races, rules: ROM.rules };
+let S = store.get('state');
+let fixBugs = !!store.get('fix');
+
+// ---------- state helpers ----------
+const rec0 = () => [0, 0, 0, 0];
+function newHorse(i) {
+  return { name: 'Horse ' + (i + 1), sex: 0, age: 1, jockey: 'j61', weight: 55, style: 1, distRec: [rec0(), rec0(), rec0(), rec0()],
+    courseRec: [rec0(), rec0(), rec0(), rec0()], trackRec: rec0(), freshRec: rec0(),
+    form: [0, 1, 2, 3].map(() => ({ c: 10, f: 0, m: 0 })), training: 2, bwLast: 0, bwLow: 0, bwHigh: 0, bwToday: 0, mark: 0,
+    excite: 1, sweat: 1, coat: 1, odds: 100, scratched: false };
+}
+function baseCfg() { return { simple: false, track: 0, narrow: false, weights: Array(13).fill(5),
+  questions: { sexage: true, distance: true, course: true, track: true, fresh: true, training: true, body: true, marks: true, paddock: true } }; }
+function example() {
+  const jk = n => (lib.jockeys.find(j => j.name === n) || { id: 'j61' }).id;
+  const H = (name, sex, age, jockey, style, odds, mark, form, dist, extra) => Object.assign(newHorse(0), { name, sex, age, jockey: jk(jockey), style, odds, mark,
+    form: form.map(([c, f, m]) => ({ c, f, m })), distRec: [rec0(), rec0(), dist, rec0()] }, extra || {});
+  const horses = [
+    H('Midnight Kaiser', 0, 2, 'Yutaka Take', 1, 32, 1, [[2,0,2],[1,1,1],[0,2,3],[0,0,1]], [3,2,1,1], { training: 3, bwToday: 478, bwLast: 476, excite: 2, coat: 2 }),
+    H('Silver Monsoon', 0, 3, 'Yukio Okabe', 2, 45, 2, [[0,1,1],[0,3,4],[1,0,3],[0,2,2]], [2,3,1,2], { training: 2, bwToday: 490, bwLast: 486 }),
+    H('Crimson Lantern', 1, 2, 'Masato Shibata', 1, 78, 3, [[1,0,1],[1,2,2],[0,4,5],[1,0,0]], [2,1,2,2], { training: 3 }),
+    H('Harbor Light', 0, 4, 'Norihiro Yokoyama', 3, 95, 0, [[0,5,6],[1,1,2],[0,6,8],[0,3,3]], [1,2,2,4], { training: 2, sweat: 0 }),
+    H('Paper Crane', 0, 2, 'Hiroshi Kawachi', 0, 120, 0, [[2,0,4],[2,1,1],[3,0,2],[1,4,5]], [1,1,0,2], { training: 4 }),
+    H('Tsukuba Wind', 0, 3, 'Shoichi Osaki', 2, 160, 0, [[1,3,4],[1,2,3],[0,7,9],[0,8,11]], [1,2,1,3], {}),
+    H('Bamboo Comet', 1, 3, 'Katsumi Minai', 1, 210, 0, [[3,0,3],[2,2,2],[2,4,6],[1,6,8]], [1,0,1,2], { excite: 0 }),
+    H('Old Lighthouse', 0, 5, 'Hitoshi Matoba', 3, 350, 4, [[0,9,12],[0,10,15],[1,5,7],[1,8,9]], [2,2,3,6], { training: 1 }),
+    H('Lucky Abacus', 0, 3, 'Hiroshi Gohara', 0, 480, 0, [[3,1,1],[3,3,4],[2,7,9],[2,9,11]], [0,1,1,3], {}),
+    H('Quiet Typhoon', 0, 4, 'Seiki Tabara', 2, 640, 0, [[2,5,6],[1,9,12],[1,11,15],[0,12,15]], [1,0,2,5], { training: 1, coat: 0 })
+  ];
+  return { presetId: 'r15', example: true, race: raceFromPreset(lib.races.find(r => r.id === 'r15')), cfg: baseCfg(), horses };
+}
+function raceFromPreset(p) {
+  const meters = [1600, 2000, 2500][p.dist];
+  return { name: p.name, course: p.course, meters, dist: p.dist, surface: p.surface, dir: p.dir, circuit: p.circuit, wcond: p.wcond, lowClass: !!p.lowClass, presetId: p.id };
+}
+if (!S) S = example();
+function save() { store.set('state', S); store.set('lib', lib); store.set('fix', fixBugs); }
+
+// ---------- generic field binding ----------
+function opts(list, sel) { return list.map((t, i) => `<option value="${i}"${i === sel ? ' selected' : ''}>${esc(t)}</option>`).join(''); }
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+const NO_COURSE = { id: 'none', name: 'No racecourse', dir: 0, circuits: false, tips: {} };
+const courseById = id => lib.courses.find(c => c.id === id) || lib.courses[0] || NO_COURSE;
+function twoStep(btn, label, fn) { btn.addEventListener('click', () => { if (!btn.dataset.armed) { btn.dataset.armed = '1'; const t = btn.textContent; btn.textContent = label; btn._t = setTimeout(() => { delete btn.dataset.armed; btn.textContent = t; }, 4000); btn._orig = t; return; }
+  clearTimeout(btn._t); delete btn.dataset.armed; btn.textContent = btn._orig; fn(); }); }
+
+// ---------- RACE TAB ----------
+function renderRace() {
+  const r = S.race;
+  $('#r-preset').innerHTML = `<option value="">Custom race</option>` + ['G1', 'G2', '1500+', '900-', 'custom'].map(g => {
+    const rs = lib.races.filter(x => (x.grade || 'custom') === g); if (!rs.length) return '';
+    const label = { G1: 'G1 races (1993)', G2: 'Other graded races (1993)', '1500+': 'Generic classes', '900-': 'Generic classes', custom: 'Your races' }[g];
+    return `<optgroup label="${label}">` + rs.map(x => `<option value="${x.id}"${x.id === S.presetId ? ' selected' : ''}>${esc(x.name)}</option>`).join('') + '</optgroup>';
+  }).join('');
+  $('#r-name').value = r.name || '';
+  $('#r-course').innerHTML = (lib.courses.length ? '' : '<option value="none">No racecourses (add one under Courses, jockeys, races)</option>') + lib.courses.map(c => `<option value="${c.id}"${c.id === r.course ? ' selected' : ''}>${esc(c.name)}</option>`).join('');
+  $('#r-meters').value = r.meters || '';
+  $('#r-dist').value = r.dist; $('#r-surface').value = r.surface; $('#r-dir').value = r.dir; $('#r-circuit').value = r.circuit;
+  $('#r-wcond').value = r.wcond; $('#r-track').value = S.cfg.track; $('#r-low').checked = !!r.lowClass;
+  const c = courseById(r.course);
+  $('#r-circuit').disabled = !c.circuits;
+  $('#example-note').textContent = S.example ? 'Example race with fictional horses. Replace it with a real race card.' : '';
+  renderTip();
+}
+function renderTip() {
+  const r = S.race, p = lib.races.find(x => x.id === S.presetId);
+  if (p && p.tip) { $('#tip-text').textContent = p.tip; $('#tip-src').textContent = 'Advice for ' + p.name + '.'; return; }
+  const c = courseById(r.course), key = (r.surface ? 'dirt' : 'turf') + '-' + r.dist, t = (c.tips || {})[key];
+  $('#tip-text').textContent = t || 'There is no data for this course.';
+  $('#tip-src').textContent = `Advice for ${c.name}, ${r.surface ? 'dirt' : 'turf'}, ${['short', 'mid', 'long'][r.dist]} distance. Edit tips under Courses, jockeys, races.`;
+}
+function bindRace() {
+  $('#r-preset').addEventListener('change', e => {
+    const p = lib.races.find(x => x.id === e.target.value);
+    S.presetId = e.target.value || null;
+    if (p) { S.race = raceFromPreset(p);
+      if (S.horses.every(h => h.age === 1 && h.sex === 0)) S.horses.forEach(h => { h.age = p.age; h.sex = p.sex; }); }
+    S.example = false; changed(); renderRace(); renderHorses();
+  });
+  const num = (id, key, after) => $(id).addEventListener('change', e => { S.race[key] = +e.target.value; after && after(); S.example = false; changed(); renderRace(); });
+  $('#r-name').addEventListener('input', e => { S.race.name = e.target.value; save(); });
+  $('#r-course').addEventListener('change', e => { const c = courseById(e.target.value); S.race.course = c.id; S.race.dir = c.dir; S.race.circuit = c.circuits ? 0 : 2; changed(); renderRace(); });
+  $('#r-meters').addEventListener('change', e => { const m = +e.target.value; S.race.meters = m; if (m) S.race.dist = m < 1700 ? 0 : m < 2300 ? 1 : 2; changed(); renderRace(); });
+  num('#r-dist', 'dist'); num('#r-surface', 'surface'); num('#r-dir', 'dir'); num('#r-circuit', 'circuit'); num('#r-wcond', 'wcond');
+  $('#r-track').addEventListener('change', e => { S.cfg.track = +e.target.value; changed(); });
+  $('#r-low').addEventListener('change', e => { S.race.lowClass = e.target.checked; changed(); });
+}
+
+// ---------- HORSES TAB ----------
+function jockeyOptions(sel) {
+  return `<option value="j61"${sel === 'j61' ? ' selected' : ''}>Not set</option>` + lib.jockeys.map(j => `<option value="${j.id}"${j.id === sel ? ' selected' : ''}>${esc(j.name)}</option>`).join('');
+}
+function recTable(path, cols, grid) {
+  // grid: array of 4-arrays (columns) ; rows = finishes
+  return `<table class="rec"><tr><th></th>${cols.map(c => `<th>${c}</th>`).join('')}</tr>` + RECROWS.map((rn, f) =>
+    `<tr><th>${rn}</th>${cols.map((c, g) => `<td><input type="number" min="0" max="15" data-k="${path}.${g}.${f}" value="${grid[g][f]}" aria-label="${c} ${rn}"></td>`).join('')}</tr>`).join('') + '</table>';
+}
+function horseCard(h, i, open) {
+  const c = courseById(S.race.course);
+  const odds = (h.odds / 10).toFixed(1);
+  return `<details class="horse${h.scratched ? ' scratched' : ''}" data-i="${i}"${open ? ' open' : ''}>
+  <summary><span class="no">${i + 1}</span><span class="nm">${esc(h.name)}</span>
+    <span class="meta hide-sm">${esc((lib.jockeys.find(j => j.id === h.jockey) || { name: 'No jockey' }).name)}</span>
+    <span class="meta hide-sm">${STYLE_SHORT[h.style]}</span><span class="meta num">${h.scratched ? 'Scratched' : odds + '×'}</span>
+    <span class="mark hide-sm">${MARKS[h.mark]}</span><span class="caret">▶</span></summary>
+  <div class="body">
+    <div class="fields" style="margin-top:12px">
+      <label class="f"><span>Name</span><input type="text" data-k="name" value="${esc(h.name)}"></label>
+      <label class="f"><span>Jockey</span><select data-k="jockey" data-type="str">${jockeyOptions(h.jockey)}</select></label>
+      <label class="f"><span>Running style</span><select data-k="style">${opts(STYLES, h.style)}</select></label>
+      <label class="f"><span>Win odds (×)</span><input type="number" step="0.1" min="0" max="999.9" data-k="odds" data-scale="10" value="${odds}"></label>
+      <label class="f"><span>Your mark</span><select data-k="mark">${opts(MARK_NAMES, h.mark)}</select></label>
+      <label class="f"><span>Sex</span><select data-k="sex">${opts(['Colt / horse', 'Filly / mare'], h.sex)}</select></label>
+      <label class="f"><span>Age (modern count)</span><select data-k="age">${opts(['2', '3', '4', '5', '6', '7', '8', '9+'], h.age)}</select></label>
+      <label class="f"><span>Weight carried (kg)</span><input type="number" min="40" max="70" data-k="weight" value="${h.weight}"></label>
+      <label class="f"><span>Training report</span><select data-k="training">${opts(TRAIN, h.training)}</select></label>
+      <label class="f check" style="align-self:end"><input type="checkbox" data-k="scratched"${h.scratched ? ' checked' : ''}> Scratched</label>
+    </div>
+    <h4>Last four races</h4>
+    <div class="scroll-x"><table class="rec"><tr><th></th><th>Class</th><th>Finish</th><th>Margin (s)</th></tr>
+    ${['4 races ago', '3 races ago', '2 races ago', 'Last race'].map((n, k) => `<tr><th>${n}</th>
+      <td><select data-k="form.${k}.c">${opts(CLASSES, h.form[k].c)}</select></td>
+      <td><select data-k="form.${k}.f"${h.form[k].c === 10 ? ' disabled' : ''}>${opts(Array.from({ length: 18 }, (_, j) => (j + 1) + (['st', 'nd', 'rd'][j] || 'th')), h.form[k].f)}</select></td>
+      <td><select data-k="form.${k}.m"${h.form[k].c === 10 ? ' disabled' : ''}>${opts(Array.from({ length: 16 }, (_, j) => j < 15 ? (j / 10).toFixed(1) : '1.5+'), h.form[k].m)}</select></td></tr>`).join('')}
+    </table></div>
+    <p class="hint">Margin: for a winner, how far ahead of second; otherwise, how far behind the winner. Mark a race slot as "Layoff" if the horse didn't run.</p>
+    <h4>Record by distance</h4><div class="scroll-x">${recTable('distRec', ['Short', 'Mid', 'Long', 'Heavy track'], h.distRec)}</div>
+    <h4>Record by course type</h4><div class="scroll-x">${recTable('courseRec', ['Left turf', 'Left dirt', 'Right turf', 'Right dirt'], h.courseRec)}</div>
+    <div class="grid cols-2" style="margin-top:6px">
+      <div><h4>Record at ${esc(c.name)}</h4>${recTable('trackRec', ['Runs'], [h.trackRec])}</div>
+      <div><h4>Record when fresh</h4>${recTable('freshRec', ['Runs'], [h.freshRec])}<p class="hint">First run after a layoff. Only used when the last race slot is "Layoff".</p></div>
+    </div>
+    <h4>Body weight (kg)</h4>
+    <div class="fields">
+      <label class="f"><span>Today</span><input type="number" min="0" max="639" data-k="bwToday" value="${h.bwToday || ''}"></label>
+      <label class="f"><span>Last race</span><input type="number" min="0" max="639" data-k="bwLast" value="${h.bwLast || ''}"></label>
+      <label class="f"><span>Winning weight, low</span><input type="number" min="0" max="639" data-k="bwLow" value="${h.bwLow || ''}"></label>
+      <label class="f"><span>Winning weight, high</span><input type="number" min="0" max="639" data-k="bwHigh" value="${h.bwHigh || ''}"></label>
+    </div>
+    <h4>Paddock</h4>
+    <div class="fields">
+      <label class="f"><span>Excitement</span><select data-k="excite">${opts(EXCITE, h.excite)}</select></label>
+      <label class="f"><span>Sweating</span><select data-k="sweat">${opts(SWEAT, h.sweat)}</select></label>
+      <label class="f"><span>Coat</span><select data-k="coat">${opts(COAT, h.coat)}</select></label>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn small" data-act="up">Move up</button><button class="btn small" data-act="down">Move down</button>
+      <button class="btn small" data-act="dup">Duplicate</button><button class="btn small danger" data-act="del">Remove</button>
+    </div>
+  </div></details>`;
+}
+function renderHorses() {
+  const openSet = new Set($$('#horse-list details[open]').map(d => +d.dataset.i));
+  $('#horse-list').innerHTML = S.horses.map((h, i) => horseCard(h, i, openSet.has(i))).join('') || '<div class="box"><p class="hint" style="margin:0">No horses yet. Use Add horse to enter the field.</p></div>';
+}
+function setPath(obj, path, v) { const ks = path.split('.'); let o = obj; for (let k = 0; k < ks.length - 1; k++) o = o[ks[k]]; o[ks[ks.length - 1]] = v; }
+function bindHorses() {
+  const list = $('#horse-list');
+  list.addEventListener('change', e => {
+    const el = e.target, k = el.dataset.k; if (!k) return;
+    const i = +el.closest('details').dataset.i, h = S.horses[i];
+    let v;
+    if (el.type === 'checkbox') v = el.checked;
+    else if (el.dataset.type === 'str' || el.type === 'text') v = el.value;
+    else { v = +el.value || 0; if (el.dataset.scale) v = Math.round(v * +el.dataset.scale);
+      if (/Rec/.test(k)) v = Math.max(0, Math.min(15, Math.round(v)));
+      if (k === 'weight') v = Math.max(40, Math.min(70, Math.round(v)));
+      if (/^bw/.test(k)) v = v ? Math.max(390, Math.min(639, Math.round(v))) : 0;
+      if (k === 'odds') v = Math.max(0, Math.min(9999, v)); }
+    setPath(h, k, v);
+    if (k === 'scratched' && S.horses.filter(x => !x.scratched).length < 2) { h.scratched = false; }
+    S.example = false; changed();
+    if (/^(name|jockey|style|odds|mark|scratched)$/.test(k) || /form\.\d\.c/.test(k)) renderHorses();
+  });
+  list.addEventListener('click', e => {
+    const b = e.target.closest('button[data-act]'); if (!b) return;
+    const i = +b.closest('details').dataset.i, a = b.dataset.act;
+    if (a === 'del') S.horses.splice(i, 1);
+    if (a === 'dup') { if (S.horses.length >= 18) return; const c = clone(S.horses[i]); c.name += ' (copy)'; S.horses.splice(i + 1, 0, c); }
+    if (a === 'up' && i > 0) [S.horses[i - 1], S.horses[i]] = [S.horses[i], S.horses[i - 1]];
+    if (a === 'down' && i < S.horses.length - 1) [S.horses[i + 1], S.horses[i]] = [S.horses[i], S.horses[i + 1]];
+    changed(); renderHorses();
+  });
+  $('#h-add').addEventListener('click', () => { if (S.horses.length >= 18) return; S.horses.push(newHorse(S.horses.length)); changed(); renderHorses();
+    const last = $$('#horse-list details').pop(); if (last) { last.open = true; last.scrollIntoView({ block: 'nearest' }); } });
+  twoStep($('#h-clear'), 'Click again to remove every horse', () => { S.horses = []; S.example = false; changed(); renderHorses(); });
+  $('#h-expand').addEventListener('click', () => $$('#horse-list details').forEach(d => d.open = true));
+  $('#h-collapse').addEventListener('click', () => $$('#horse-list details').forEach(d => d.open = false));
+}
+
+// ---------- SETTINGS ----------
+const PCTS = [0, 10, 20, 30, 60, 100, 120, 150, 200, 250, 300];
+function renderSettings() {
+  $('#weights').innerHTML = BKV3.ITEMS.map((n, i) => `<label class="f"><span>${n}</span><select data-w="${i}">${PCTS.map((p, l) => `<option value="${l}"${S.cfg.weights[i] === l ? ' selected' : ''}>${p}%${l === 5 ? ' (default)' : ''}</option>`).join('')}</select></label>`).join('');
+  $('#questions').innerHTML = QUESTIONS.map(([k, n]) => `<label class="check"><input type="checkbox" data-q="${k}"${S.cfg.questions[k] ? ' checked' : ''}> ${n}</label>`).join('');
+  $('#o-simple').checked = S.cfg.simple; $('#o-narrow').checked = S.cfg.narrow;
+}
+function bindSettings() {
+  $('#weights').addEventListener('change', e => { S.cfg.weights[+e.target.dataset.w] = +e.target.value; changed(); });
+  $('#questions').addEventListener('change', e => { S.cfg.questions[e.target.dataset.q] = e.target.checked; changed(); });
+  $('#o-simple').addEventListener('change', e => { S.cfg.simple = e.target.checked; changed(); });
+  $('#o-narrow').addEventListener('change', e => { S.cfg.narrow = e.target.checked; changed(); });
+  $('#w-reset').addEventListener('click', () => { S.cfg.weights = Array(13).fill(5); renderSettings(); changed(); });
+  $('#x-export').addEventListener('click', () => { $('#x-text').value = JSON.stringify({ bkv3: 1, state: S, library: lib }, null, 1);
+    $('#x-text').select(); try { navigator.clipboard.writeText($('#x-text').value).catch(() => {}); } catch (e) {} });
+  $('#x-import').addEventListener('click', () => { try { const o = JSON.parse($('#x-text').value); if (o.library) lib = o.library; if (o.state) S = o.state;
+    renderAll(); changed(); $('#x-text').value = 'Imported.'; } catch (e) { $('#x-text').value = 'That text is not valid exported JSON: ' + e.message; } });
+  $('#x-example').addEventListener('click', () => { S = example(); renderAll(); changed(); });
+  $('#x-blank').addEventListener('click', () => { const ex = example(); S = { presetId: null, example: false, race: Object.assign(ex.race, { name: 'My race', presetId: null }), cfg: baseCfg(),
+    horses: Array.from({ length: 8 }, (_, i) => newHorse(i)) }; renderAll(); changed(); });
+}
+
+// ---------- LIBRARY ----------
+const RULE_TARGETS = [['s0', 'Front-runners'], ['s1', 'Stalkers'], ['s2', 'Closers'], ['s3', 'Deep closers'], ['s01', 'Front-runners + stalkers'], ['s13', 'Stalkers + deep closers'], ['s23', 'Closers + deep closers'], ['inside', 'Inside draw (no. 1–3)'], ['outside', 'Outside draw (last 3)'], ['lone', 'Lone front-runner']];
+const targetKey = t => Array.isArray(t) ? 's' + t.join('') : t;
+const targetVal = k => k.startsWith('s') ? k.slice(1).split('').map(Number) : k;
+let editCourse = null;
+function renderLibrary() {
+  if (!lib.courses.length) { $('#c-pick').innerHTML = ''; $('#c-edit').innerHTML = '<p class="hint">No racecourses yet. Use Add course to create one.</p>'; renderLibTables(); return; }
+  if (!editCourse || !lib.courses.find(c => c.id === editCourse)) editCourse = lib.courses[0].id;
+  $('#c-pick').innerHTML = lib.courses.map(c => `<option value="${c.id}"${c.id === editCourse ? ' selected' : ''}>${esc(c.name)}</option>`).join('');
+  const c = courseById(editCourse);
+  const rules = lib.rules.map((r, ix) => ({ r, ix })).filter(x => x.r.course === c.id || x.r.course === 'any');
+  $('#c-edit').innerHTML = `<div class="fields">
+    <label class="f"><span>Name</span><input type="text" id="ce-name" value="${esc(c.name)}"></label>
+    <label class="f"><span>Direction</span><select id="ce-dir">${opts(['Left-handed', 'Right-handed'], c.dir)}</select></label>
+    <label class="f check" style="align-self:end"><input type="checkbox" id="ce-circ"${c.circuits ? ' checked' : ''}> Has inner and outer circuits</label>
+    <div class="row" style="align-self:end">${c.id.startsWith('u') ? '<button class="btn small danger" id="ce-del">Delete course</button>' : ''}</div>
+  </div>
+  <h4 style="font-family:var(--font-display);font-weight:400;margin:16px 0 6px">Bias rules</h4>
+  <p class="hint">Points given to matching horses (doubled in the second pass). Rules marked "all courses" apply everywhere.</p>
+  <div class="scroll-x"><table class="lib" id="rule-table"><tr><th>Course</th><th>Surface</th><th>Short</th><th>Mid</th><th>Long</th><th>Circuit</th><th>Who</th><th>Points</th><th></th></tr>
+  ${rules.map(({ r, ix }) => `<tr data-ix="${ix}"><td>${r.course === 'any' ? 'All courses' : esc(c.name)}</td>
+    <td><select data-rk="surface">${['any', 'turf', 'dirt'].map(v => `<option value="${v}"${r.surface === v ? ' selected' : ''}>${v === 'any' ? 'Any' : v[0].toUpperCase() + v.slice(1)}</option>`).join('')}</select></td>
+    ${[0, 1, 2].map(d => `<td><input type="checkbox" data-rd="${d}"${r.dist.includes(d) ? ' checked' : ''} aria-label="distance ${d}"></td>`).join('')}
+    <td><select data-rk="circuit">${['any', 'inner', 'outer'].map(v => `<option value="${v}"${r.circuit === v ? ' selected' : ''}>${v[0].toUpperCase() + v.slice(1)}</option>`).join('')}</select></td>
+    <td><select data-rk="target">${RULE_TARGETS.map(([k, n]) => `<option value="${k}"${targetKey(r.target) === k ? ' selected' : ''}>${n}</option>`).join('')}</select></td>
+    <td><input type="number" min="-9" max="9" data-rk="pts" value="${r.pts}"></td>
+    <td><button class="btn small danger" data-rdel="${ix}">Remove</button></td></tr>`).join('')}</table></div>
+  <div class="row" style="margin-top:8px"><button class="btn small" id="rule-add">Add rule for ${esc(c.name)}</button></div>
+  <h4 style="font-family:var(--font-display);font-weight:400;margin:16px 0 6px">Course tips</h4>
+  <div class="grid cols-3">${['turf', 'dirt'].flatMap(s => [0, 1, 2].map(d => `<label class="f"><span>${s[0].toUpperCase() + s.slice(1)}, ${['short', 'mid', 'long'][d]}</span><textarea data-tip="${s}-${d}">${esc((c.tips || {})[s + '-' + d] || '')}</textarea></label>`)).join('')}</div>`;
+  renderLibTables();
+}
+function renderLibTables() {
+  // jockeys
+  const JH = ['Base', 'Turf', 'Dirt', 'Front/stalker', 'Closer', 'Short', 'Mid', 'Long'];
+  $('#j-table').innerHTML = `<tr><th>Jockey</th>${JH.map(h => `<th>${h}</th>`).join('')}<th>Best</th><th></th></tr>` + lib.jockeys.map((j, ix) => `<tr data-j="${ix}">
+    <td><input type="text" data-jn value="${esc(j.name)}"></td>${j.r.map((v, k) => `<td><input type="number" min="-9" max="9" data-jr="${k}" value="${v}" aria-label="${JH[k]}"></td>`).join('')}
+    <td class="num">${j.r[0] + Math.max(j.r[1], j.r[2]) + Math.max(j.r[3], j.r[4]) + Math.max(j.r[5], j.r[6], j.r[7])}</td>
+    <td><button class="btn small danger" data-jdel="${ix}">Remove</button></td></tr>`).join('');
+  // races
+  $('#rp-table').innerHTML = `<tr><th>Race</th><th>Grade</th><th>Course</th><th>Distance</th><th>Surface</th><th>Dir</th><th>Circuit</th><th>Weights</th><th>Low class</th><th></th></tr>` + lib.races.map((r, ix) => `<tr data-r="${ix}">
+    <td><input type="text" data-rp="name" value="${esc(r.name)}"></td><td>${esc(r.grade || 'custom')}</td>
+    <td><select data-rp="course">${lib.courses.map(c => `<option value="${c.id}"${c.id === r.course ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select></td>
+    <td><select data-rp="dist">${opts(['Short', 'Mid', 'Long'], r.dist)}</select></td><td><select data-rp="surface">${opts(['Turf', 'Dirt'], r.surface)}</select></td>
+    <td><select data-rp="dir">${opts(['Left', 'Right'], r.dir)}</select></td><td><select data-rp="circuit">${opts(['Inner', 'Outer', 'Single'], r.circuit)}</select></td>
+    <td><select data-rp="wcond">${opts(['Set', 'Allowance', 'Age', 'Handicap'], r.wcond)}</select></td>
+    <td><input type="checkbox" data-rp="lowClass"${r.lowClass ? ' checked' : ''}></td>
+    <td>${r.grade === 'custom' ? `<button class="btn small danger" data-rpdel="${ix}">Remove</button>` : ''}</td></tr>`).join('');
+}
+function bindLibrary() {
+  $('#c-pick').addEventListener('change', e => { editCourse = e.target.value; renderLibrary(); });
+  $('#c-add').addEventListener('click', () => { const id = 'u' + Date.now().toString(36); lib.courses.push({ id, name: 'New racecourse', dir: 1, circuits: false, tips: {} }); editCourse = id; changed(); renderLibrary(); renderRace(); });
+  $('#c-edit').addEventListener('change', e => {
+    const c = courseById(editCourse), t = e.target;
+    if (t.id === 'ce-name') c.name = t.value; else if (t.id === 'ce-dir') c.dir = +t.value; else if (t.id === 'ce-circ') c.circuits = t.checked;
+    else if (t.dataset.tip) { c.tips = c.tips || {}; c.tips[t.dataset.tip] = t.value; }
+    else { const tr = t.closest('tr[data-ix]'); if (tr) { const r = lib.rules[+tr.dataset.ix];
+      if (t.dataset.rk === 'target') r.target = targetVal(t.value); else if (t.dataset.rk === 'pts') r.pts = +t.value || 0; else if (t.dataset.rk) r[t.dataset.rk] = t.value;
+      if (t.dataset.rd) { const d = +t.dataset.rd; r.dist = t.checked ? [...new Set([...r.dist, d])].sort() : r.dist.filter(x => x !== d); } } }
+    changed(); renderRace(); if (t.id === 'ce-name') renderLibrary();
+  });
+  $('#c-edit').addEventListener('click', e => {
+    if (e.target.id === 'rule-add') { lib.rules.push({ course: editCourse, surface: 'turf', dist: [0, 1, 2], circuit: 'any', target: [1], pts: 1, src: 'user' }); changed(); renderLibrary(); }
+    if (e.target.dataset.rdel) { lib.rules.splice(+e.target.dataset.rdel, 1); changed(); renderLibrary(); }
+    if (e.target.id === 'ce-del') { lib.courses = lib.courses.filter(c => c.id !== editCourse); lib.rules = lib.rules.filter(r => r.course !== editCourse);
+      if (S.race.course === editCourse) S.race.course = lib.courses[0].id; editCourse = null; changed(); renderLibrary(); renderRace(); }
+  });
+  $('#j-add').addEventListener('click', () => { lib.jockeys.push({ id: 'uj' + Date.now().toString(36), name: 'New jockey', r: [2, 0, 0, 0, 0, 0, 0, 0] }); changed(); renderLibrary(); renderHorses(); });
+  $('#j-table').addEventListener('change', e => { const tr = e.target.closest('tr[data-j]'); if (!tr) return; const j = lib.jockeys[+tr.dataset.j];
+    if (e.target.dataset.jn !== undefined) j.name = e.target.value; else j.r[+e.target.dataset.jr] = Math.max(-9, Math.min(9, Math.round(+e.target.value || 0)));
+    changed(); renderLibrary(); renderHorses(); });
+  $('#j-table').addEventListener('click', e => { if (e.target.dataset.jdel === undefined) return; lib.jockeys.splice(+e.target.dataset.jdel, 1); changed(); renderLibrary(); renderHorses(); });
+  $('#rp-add').addEventListener('click', () => { lib.races.push({ id: 'ur' + Date.now().toString(36), name: 'New race', grade: 'custom', course: courseById(null).id, dist: 1, surface: 0, dir: courseById(null).dir, circuit: 2, age: 1, sex: 0, wcond: 0, tip: '', lowClass: false }); changed(); renderLibrary(); renderRace(); });
+  $('#rp-table').addEventListener('change', e => { const tr = e.target.closest('tr[data-r]'); if (!tr) return; const r = lib.races[+tr.dataset.r], k = e.target.dataset.rp;
+    r[k] = e.target.type === 'checkbox' ? e.target.checked : (k === 'name' || k === 'course') ? e.target.value : +e.target.value;
+    if (S.presetId === r.id) S.race = Object.assign(raceFromPreset(r), { name: S.race.name });
+    changed(); renderRace(); });
+  $('#rp-table').addEventListener('click', e => { if (e.target.dataset.rpdel === undefined) return; lib.races.splice(+e.target.dataset.rpdel, 1); changed(); renderLibrary(); renderRace(); });
+  const ROMLIB = () => clone({ courses: ROM.courses, jockeys: ROM.jockeys, races: ROM.races, rules: ROM.rules });
+  twoStep($('#c-clear'), 'Click again: remove all courses, rules and tips', () => { lib.courses = []; lib.rules = []; editCourse = null; S.race.course = 'none'; changed(); renderLibrary(); renderRace(); });
+  twoStep($('#c-restore'), 'Click again to restore', () => { const r = ROMLIB(); lib.courses = r.courses; lib.rules = r.rules; editCourse = null; changed(); renderLibrary(); renderRace(); });
+  twoStep($('#j-clear'), 'Click again: remove all jockeys', () => { lib.jockeys = []; S.horses.forEach(h => h.jockey = 'j61'); changed(); renderLibrary(); renderHorses(); });
+  twoStep($('#j-restore'), 'Click again to restore', () => { lib.jockeys = ROMLIB().jockeys; changed(); renderLibrary(); renderHorses(); });
+  twoStep($('#rp-clear'), 'Click again: remove all race presets', () => { lib.races = []; S.presetId = null; changed(); renderLibrary(); renderRace(); });
+  twoStep($('#rp-restore'), 'Click again to restore', () => { lib.races = ROMLIB().races; changed(); renderLibrary(); renderRace(); });
+  $('#lib-reset').addEventListener('click', e => {
+    const b = e.target; if (!b.dataset.confirm) { b.dataset.confirm = '1'; b.textContent = 'Click again to restore (your edits are lost)'; setTimeout(() => { delete b.dataset.confirm; b.textContent = 'Restore 1993 cartridge data'; }, 4000); return; }
+    lib = clone({ courses: ROM.courses, jockeys: ROM.jockeys, races: ROM.races, rules: ROM.rules }); delete b.dataset.confirm; b.textContent = 'Restore 1993 cartridge data'; changed(); renderAll();
+  });
+}
+
+// ---------- RESULTS ----------
+let lastResult = null;
+function compute() {
+  const race = Object.assign({}, S.race);
+  const res = BKV3.predict(race, S.horses, S.cfg, { jockeys: lib.jockeys, rules: lib.rules }, { fixBugs });
+  lastResult = res; return res;
+}
+function nameOf(i) { return S.horses[i] ? S.horses[i].name : '?'; }
+function renderOrder(el, P, limit) {
+  const max = Math.max(1, ...P.sorted.map(v => Math.abs(v)));
+  el.innerHTML = P.order.slice(0, limit).map((id, k) => `<li class="${k < 3 ? 'top' : ''}"><span class="rk">${k + 1}${['st', 'nd', 'rd'][k] || 'th'}</span>
+    <span class="hn">${id + 1}</span><span class="nm">${esc(nameOf(id))}</span><span class="bar" aria-hidden="true"><i style="width:${Math.max(0, P.sorted[k]) / max * 100}%"></i></span>
+    <span class="sc">${P.sorted[k]}</span></li>`).join('');
+}
+function renderResults() {
+  if (S.horses.filter(h => !h.scratched).length < 2) {
+    const msg = '<p class="hint" style="margin:0">Add at least two runners on the Horses tab to see a prediction.</p>';
+    $('#top-result').innerHTML = '<span class="eyebrow">Prediction</span>' + msg; ['#res-comment', '#res-picks', '#res-brackets', '#wf'].forEach(q => $(q).innerHTML = msg);
+    ['#res-order', '#res-order2', '#res-parts'].forEach(q => $(q).innerHTML = ''); $('#res-scale').textContent = ''; $('#wf-note').textContent = ''; $('#res-horse').innerHTML = ''; $('#wf-horse').innerHTML = ''; lastResult = null; return; }
+  const res = compute(), P = res.pass0, cm = res.commentary;
+  // top strip
+  const top = P.order.slice(0, 3).map((id, k) => `<span class="display" style="font-size:${k ? 1.05 : 1.35}rem">${['1st', '2nd', '3rd'][k]} <b>${id + 1}</b> ${esc(nameOf(id))}</span>`).join('<span class="hint">·</span>');
+  $('#top-result').innerHTML = `<span class="eyebrow">Prediction</span>${top}<span class="tag ${cm.cat === 4 || cm.cat === 3 ? 'good' : cm.cat <= 1 ? 'warn' : ''}" style="margin-left:auto">${cm.headline}</span>`;
+  $('#res-comment').innerHTML = `<div class="eyebrow">${esc(S.race.name || 'Race')} · ${esc(courseById(S.race.course).name)} ${S.race.surface ? 'dirt' : 'turf'} ${S.race.meters ? S.race.meters + ' m' : ''}</div>
+    <p class="headline">${cm.headline}</p><p>${cm.body}</p><p>${cm.connector} ${cm.follow}</p>`;
+  renderOrder($('#res-order'), P, 18); renderOrder($('#res-order2'), res.pass1, 6);
+  const notes = [`One point is worth ${P.scale} in this race.`];
+  if (res.alt) notes.push('Young or low-class field: the game ignores records and trusts jockey, marks and odds.');
+  if (!fixBugs && !res.alt) notes.push('Paddock counts 250% here (cartridge bug).');
+  $('#res-scale').textContent = notes.join(' ');
+  const groups = [['Favorite picks (本命)', 0], ['Mid-price picks', 1], ['Longshot picks (穴)', 2]];
+  const pickHtml = (list, bracket) => groups.map(([g, c]) => { const ps = list.filter(p => p.cat === c); if (!ps.length) return '';
+    return `<div style="margin-bottom:10px"><div class="eyebrow" style="margin-bottom:4px">${g}</div><div class="picks">${ps.map(p => `<span class="pick${c === 0 ? ' fav' : ''}">${bracket ? p.lo : p.lo + 1}–${bracket ? p.hi : p.hi + 1}${!bracket && p.product ? `<small title="product of rounded odds">×${p.product}</small>` : ''}</span>`).join('')}</div></div>`; }).join('');
+  $('#res-picks').innerHTML = pickHtml(res.picks, false) || '<p class="hint">No pair qualified. Enter win odds for the runners.</p>';
+  $('#res-brackets').innerHTML = (pickHtml(res.bracketPicks, true) || '<p class="hint">No bracket pairs.</p>') + (S.horses.length <= 8 ? '<p class="hint">With 8 or fewer runners every horse has its own bracket.</p>' : '');
+  // breakdown
+  const sel = $('#res-horse'), cur = sel.value === '' ? P.order[0] : +sel.value;
+  sel.innerHTML = S.horses.map((h, i) => `<option value="${i}"${i === cur ? ' selected' : ''}>${i + 1}. ${esc(h.name)}${h.scratched ? ' (scratched)' : ''}</option>`).join('');
+  renderParts(cur);
+  renderWaterfall();
+}
+function renderParts(i) {
+  const res = lastResult; if (!res) return;
+  const a = res.pass0.parts[i] || {}, b = res.pass1.parts[i] || {};
+  const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])];
+  const cell = v => v === undefined ? '<td class="v">–</td>' : `<td class="v ${v > 0 ? 'pos' : v < 0 ? 'neg' : ''}">${v > 0 ? '+' : ''}${v}</td>`;
+  const tot0 = res.pass0.score[i], tot1 = res.pass1.score[i];
+  $('#res-parts').innerHTML = `<tr><th>Factor</th><th style="text-align:right">Pass 1</th><th style="text-align:right">Pass 2</th></tr>` +
+    keys.map(k => `<tr><td>${k}</td>${cell(a[k])}${cell(b[k])}</tr>`).join('') +
+    `<tr><th>Total</th>${cell(tot0)}${cell(tot1)}</tr>`;
+}
+
+
+// ---------- waterfall ----------
+let wfPass = 0;
+function renderWaterfall() {
+  const res = lastResult; if (!res) return;
+  const sel = $('#wf-horse'); const cur = sel.value === '' ? res.pass0.order[0] : +sel.value;
+  sel.innerHTML = S.horses.map((h, i) => `<option value="${i}"${i === cur ? ' selected' : ''}>${i + 1}. ${esc(h.name)}${h.scratched ? ' (scratched)' : ''}</option>`).join('');
+  const P = wfPass ? res.pass1 : res.pass0, parts = P.parts[cur] || {};
+  const steps = Object.entries(parts).filter(([, v]) => v !== 0);
+  let run = 0; const rows = steps.map(([k, v]) => { const a = run; run += v; return { k, v, a, b: run }; });
+  const total = P.score[cur];
+  const lo = Math.min(0, ...rows.map(r => Math.min(r.a, r.b))), hi = Math.max(1, ...rows.map(r => Math.max(r.a, r.b)), total);
+  const span = hi - lo || 1, X = v => (v - lo) / span * 100;
+  const step = niceStep(span / 4), ticks = []; for (let t = Math.ceil(lo / step) * step; t <= hi; t += step) ticks.push(t);
+  const grid = ticks.map(t => `<i class="${t === 0 ? 'zero' : 'grid-l'}" style="left:${X(t)}%"></i>`).join('') + (ticks.includes(0) ? '' : `<i class="zero" style="left:${X(0)}%"></i>`);
+  const row = (r, cls, i) => `<div class="wf-row${cls ? ' ' + cls : ''}" tabindex="0" data-i="${i}">
+    <span class="lab">${esc(r.k)}</span><span class="wf-track">${grid}<span class="seg ${cls === 'total' ? 'tot' : r.v >= 0 ? 'gain' : 'loss'}" style="left:${X(Math.min(r.a, r.b))}%;width:${Math.abs(X(r.b) - X(r.a))}%"></span></span>
+    <span class="val">${cls === 'total' ? r.b : (r.v > 0 ? '+' : '') + r.v}</span><span class="run">${r.b}</span></div>`;
+  $('#wf').innerHTML = `<div class="wf-head"><span>Factor</span><span class="wf-axis">${ticks.map(t => `<span style="left:${X(t)}%">${t}</span>`).join('')}</span><span class="r">Change</span><span class="r run">Running</span></div>` +
+    (rows.length ? rows.map((r, i) => row(r, '', i)).join('') : '<p class="hint">No points in this pass.</p>') + row({ k: 'Total', v: total, a: 0, b: total }, 'total', -1) + '<div class="wf-tip" hidden></div>';
+  const U = P.scale, h = S.horses[cur];
+  $('#wf-note').textContent = `One point = ${U} in this race, so a +1 item at 100% adds ${U}. ` + (wfPass ? 'Pass 2 starts from zero and is only used for bet picks.' : `Rank ${P.order.indexOf(cur) + 1} of ${P.order.length} in the finishing order.`) + (h && h.scratched ? ' This horse is scratched and is left out of the ranking.' : '');
+  const tip = $('#wf .wf-tip');
+  const show = el => { const i = +el.dataset.i; const r = i < 0 ? { k: 'Total', v: total, b: total } : rows[i];
+    tip.innerHTML = `<b>${esc(r.k)}</b><br>${i < 0 ? 'Final score' : 'Change'}: <span class="mono">${i < 0 ? r.b : (r.v > 0 ? '+' : '') + r.v}</span>` + (i < 0 ? '' : `<br>≈ <span class="mono">${(r.v / U).toFixed(1)}</span> points of ${U}<br>Running total: <span class="mono">${r.b}</span>`);
+    tip.hidden = false; const box = $('#wf').getBoundingClientRect(), b = el.getBoundingClientRect();
+    tip.style.top = (b.bottom - box.top + 4) + 'px'; tip.style.left = Math.min(box.width - 200, Math.max(0, b.left - box.left + 120)) + 'px'; };
+  $$('#wf .wf-row').forEach(el => { el.addEventListener('mouseenter', () => show(el)); el.addEventListener('focus', () => show(el));
+    el.addEventListener('mouseleave', () => tip.hidden = true); el.addEventListener('blur', () => tip.hidden = true); });
+}
+function niceStep(x) { const p = Math.pow(10, Math.floor(Math.log10(x || 1))), m = x / p; return (m < 1.5 ? 1 : m < 3 ? 2 : m < 7 ? 5 : 10) * p; }
+$('#wf-horse').addEventListener('change', renderWaterfall);
+$('#wf-p0').addEventListener('click', () => { wfPass = 0; $('#wf-p0').setAttribute('aria-pressed', 'true'); $('#wf-p1').setAttribute('aria-pressed', 'false'); renderWaterfall(); });
+$('#wf-p1').addEventListener('click', () => { wfPass = 1; $('#wf-p1').setAttribute('aria-pressed', 'true'); $('#wf-p0').setAttribute('aria-pressed', 'false'); renderWaterfall(); });
+// ---------- tabs, mode ----------
+function showTab(t) {
+  $$('nav.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t ? 'true' : 'false'));
+  $$('.panel').forEach(p => p.hidden = p.id !== 'tab-' + t);
+  try { history.replaceState(null, '', '#' + t); } catch (e) {}
+  store.set('tab', t);
+}
+$$('nav.tabs button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+$('#res-horse').addEventListener('change', e => renderParts(+e.target.value));
+function setMode(f) { fixBugs = f; $('#mode-orig').setAttribute('aria-pressed', !f); $('#mode-fix').setAttribute('aria-pressed', f); save(); renderResults(); }
+$('#mode-orig').addEventListener('click', () => setMode(false)); $('#mode-fix').addEventListener('click', () => setMode(true));
+
+function changed() { save(); renderResults(); }
+function renderAll() { renderRace(); renderHorses(); renderSettings(); renderLibrary(); renderResults(); }
+bindRace(); bindHorses(); bindSettings(); bindLibrary();
+renderAll();
+setMode(fixBugs);
+const want = (location.hash || '').slice(1);
+showTab(['race', 'horses', 'results', 'settings', 'library', 'how'].includes(want) ? want : (store.get('tab') || 'results'));
+})();
+</script>
+
+</body>
+</html>

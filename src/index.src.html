@@ -1,0 +1,871 @@
+<title>Bakenoh V3 Calculator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a Game Boy menu reimagined as a web form. Boxed panels with the game's double rule, tabs across the top,
+   results always one tap away. Palette is the DMG's four greens, re-tuned for screens in light and dark. */
+:root {
+  --bg: #e4ecd2;        /* screen paper */
+  --panel: #f2f6e8;
+  --sunk: #d6e2bd;
+  --ink: #1d3317;       /* darkest DMG shade */
+  --ink-2: #4a6340;
+  --rule: #2f4a27;
+  --accent: #3f7a2a;    /* mid green */
+  --accent-ink: #f2f6e8;
+  --hi: #a9c94a;        /* lightest lit pixel */
+  --good: #2e7d32; --bad: #a23b2a; --warn: #8a6d10;
+  --gain: #3f7a2a; --loss: #8a4aa8;   /* waterfall pair, validated for CVD on --panel */
+  --font-display: "DotGothic16", "MS Gothic", ui-monospace, monospace;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 3px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1a0d; --panel: #16240f; --sunk: #0b1409; --ink: #cfe3a4; --ink-2: #93ad74; --rule: #6f9a4c;
+  --accent: #8bbf3c; --accent-ink: #0f1a0d; --hi: #4f7a22; --good: #8fd16b; --bad: #f08a72; --warn: #e3c35a; --gain: #6fa22c; --loss: #a676dc; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0f1a0d; --panel: #16240f; --sunk: #0b1409; --ink: #cfe3a4; --ink-2: #93ad74; --rule: #6f9a4c;
+  --accent: #8bbf3c; --accent-ink: #0f1a0d; --hi: #4f7a22; --good: #8fd16b; --bad: #f08a72; --warn: #e3c35a; --gain: #6fa22c; --loss: #a676dc; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font-body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 12px 48px; }
+h1, h2, h3, .display { font-family: var(--font-display); font-weight: 400; letter-spacing: .02em; text-wrap: balance; }
+h2 { font-size: 1.35rem; margin: 0 0 .6rem; }
+h3 { font-size: 1.05rem; margin: 0 0 .5rem; }
+p { margin: 0 0 .8rem; max-width: 68ch; }
+a { color: var(--accent); }
+button, select, input, textarea { font: inherit; color: var(--ink); }
+:focus-visible { outline: 3px solid var(--hi); outline-offset: 2px; }
+.mono, .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* header */
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 3px double var(--rule); }
+.top-inner { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding-block: 10px; }
+.brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+.brand h1 { margin: 0; font-size: 1.6rem; line-height: 1; }
+.brand .jp { font-family: var(--font-display); color: var(--ink-2); font-size: 1rem; }
+.chip { display: inline-flex; align-items: center; gap: 6px; border: 2px solid var(--rule); background: var(--panel); border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: .9rem; }
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.seg { display: inline-flex; border: 2px solid var(--rule); border-radius: 999px; overflow: hidden; }
+.seg button { border: 0; background: var(--panel); padding: 4px 12px; cursor: pointer; font-size: .9rem; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+nav.tabs { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: thin; }
+nav.tabs button { flex: none; font-family: var(--font-display); font-size: 1rem; background: transparent; border: 2px solid transparent; border-radius: var(--r); padding: 4px 12px; cursor: pointer; }
+nav.tabs button[aria-selected="true"] { border-color: var(--rule); background: var(--panel); }
+nav.tabs button .cursor { visibility: hidden; color: var(--accent); }
+nav.tabs button[aria-selected="true"] .cursor { visibility: visible; }
+
+/* boxes: the game's double-ruled windows */
+.box { background: var(--panel); border: 2px solid var(--rule); border-radius: var(--r); box-shadow: inset 0 0 0 3px var(--panel), inset 0 0 0 4px var(--rule); padding: 16px 18px; min-width: 0; }
+.box + .box { margin-top: 14px; }
+.grid { display: grid; gap: 14px; }
+.cols-2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.cols-3 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.hint { color: var(--ink-2); font-size: .88rem; }
+.eyebrow { font-family: var(--font-display); color: var(--ink-2); font-size: .85rem; letter-spacing: .08em; text-transform: uppercase; }
+
+/* form */
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px 14px; }
+label.f { display: flex; flex-direction: column; gap: 3px; font-size: .85rem; color: var(--ink-2); min-width: 0; }
+label.f > span { font-weight: 500; }
+input[type=text], input[type=number], select, textarea { background: var(--bg); border: 2px solid var(--rule); border-radius: var(--r); padding: 6px 8px; min-width: 0; width: 100%; }
+input[type=number] { font-family: var(--font-mono); }
+input:disabled, select:disabled { opacity: .55; }
+textarea { min-height: 70px; resize: vertical; }
+.check { display: flex; align-items: center; gap: 8px; font-size: .92rem; }
+.check input { width: 18px; height: 18px; accent-color: var(--accent); }
+.btn { border: 2px solid var(--rule); background: var(--panel); border-radius: var(--r); padding: 6px 12px; cursor: pointer; font-weight: 500; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.small { padding: 2px 8px; font-size: .85rem; }
+.btn.danger { color: var(--bad); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+/* horse cards */
+.horse { border: 2px solid var(--rule); border-radius: var(--r); background: var(--panel); margin-bottom: 10px; }
+.horse.scratched { opacity: .6; }
+.horse summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 44px minmax(0, 1.4fr) minmax(0, 1.2fr) minmax(0, .9fr) 70px 40px 22px; gap: 10px; align-items: center; padding: 8px 12px; }
+.horse summary::-webkit-details-marker { display: none; }
+.horse summary .no { font-family: var(--font-display); font-size: 1.3rem; text-align: center; border: 2px solid var(--rule); border-radius: var(--r); background: var(--bg); line-height: 1.5; }
+.horse summary .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.horse summary .meta { color: var(--ink-2); font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.horse summary .mark { font-family: var(--font-display); font-size: 1.2rem; text-align: center; }
+.horse summary .caret { transition: transform .15s; }
+.horse[open] summary .caret { transform: rotate(90deg); }
+.horse .body { padding: 4px 14px 16px; border-top: 2px dashed var(--rule); }
+.horse .body h4 { font-family: var(--font-display); font-weight: 400; margin: 14px 0 6px; font-size: 1rem; }
+.rec { border-collapse: collapse; font-size: .88rem; }
+.rec th { font-weight: 500; color: var(--ink-2); padding: 2px 6px; text-align: center; }
+.rec td { padding: 2px 3px; }
+.rec input { width: 52px; text-align: center; padding: 3px 2px; }
+.rec select { width: auto; padding: 3px 4px; }
+.scroll-x { overflow-x: auto; }
+@media (max-width: 640px) {
+  .horse summary { grid-template-columns: 40px minmax(0, 1fr) 56px 22px; }
+  .horse summary .hide-sm { display: none; }
+}
+
+/* results */
+.headline { font-family: var(--font-display); font-size: 1.9rem; line-height: 1.2; margin: 0 0 .3rem; }
+.order { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.order li { display: grid; grid-template-columns: 52px 42px minmax(0, 1fr) minmax(70px, 34%) 60px; gap: 10px; align-items: center; }
+.order .rk { font-family: var(--font-display); font-size: 1.05rem; }
+.order .hn { font-family: var(--font-display); text-align: center; border: 2px solid var(--rule); border-radius: var(--r); background: var(--bg); }
+.order .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar { height: 10px; background: var(--sunk); border-radius: 2px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); }
+.order li.top .rk { color: var(--accent); }
+@media (max-width: 560px) { .order li { grid-template-columns: 40px 36px minmax(0, 1fr) 54px; gap: 8px; } .order .bar { display: none; } }
+.order .sc { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: .88rem; }
+.picks { display: flex; flex-wrap: wrap; gap: 8px; }
+.pick { font-family: var(--font-display); font-size: 1.15rem; border: 2px solid var(--rule); border-radius: var(--r); padding: 2px 10px; background: var(--bg); }
+.pick.fav { font-size: 1.5rem; background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.pick small { font-family: var(--font-mono); font-size: .7rem; opacity: .8; margin-left: 6px; }
+.tag { display: inline-block; font-size: .75rem; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; }
+.tag.warn { color: var(--warn); } .tag.good { color: var(--good); } .tag.bad { color: var(--bad); }
+table.parts { width: 100%; border-collapse: collapse; font-size: .9rem; }
+table.parts th, table.parts td { padding: 4px 6px; border-bottom: 1px solid var(--sunk); text-align: left; }
+table.parts td.v { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.parts td.v.pos { color: var(--good); } table.parts td.v.neg { color: var(--bad); }
+.split { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
+
+/* explainer */
+.eli5 ol { padding-left: 1.3rem; } .eli5 li { margin-bottom: .55rem; max-width: 70ch; }
+.why { border-left: 4px solid var(--hi); padding: 2px 0 2px 12px; color: var(--ink-2); max-width: 70ch; }
+.bugs li { margin-bottom: .5rem; max-width: 72ch; }
+.video { position: relative; width: 100%; max-width: 960px; margin-inline: auto; aspect-ratio: 16 / 9; border: 2px solid var(--rule); border-radius: var(--r); overflow: hidden; background: var(--sunk); }
+.video { display: block; }
+.video img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.video .play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 76px; height: 54px; border-radius: 12px; background: rgba(0,0,0,.72); color: #fff; display: grid; place-items: center; font-size: 26px; transition: background .15s; }
+.video:hover .play, .video:focus-visible .play { background: #c4302b; }
+.cm { display: grid; grid-template-columns: minmax(0, 480px) minmax(0, 1fr); gap: 16px; align-items: center; text-decoration: none; color: inherit; }
+.cm img { width: 100%; aspect-ratio: 16/9; object-fit: cover; border: 2px solid var(--rule); border-radius: var(--r); display: block; max-width: 100%; }
+@media (max-width: 560px) { .cm { grid-template-columns: 1fr; } }
+
+/* library */
+table.lib { border-collapse: collapse; font-size: .88rem; width: 100%; }
+table.lib th, table.lib td { border-bottom: 1px solid var(--sunk); padding: 4px; text-align: left; vertical-align: middle; }
+table.lib input[type=number] { width: 54px; padding: 3px; text-align: center; }
+table.lib input[type=text] { min-width: 150px; padding: 3px 6px; }
+table.lib select { width: auto; padding: 3px; }
+
+/* formula + diagram + waterfall */
+.formula { font-family: var(--font-mono); font-size: .95rem; background: var(--bg); border: 2px solid var(--rule); border-radius: var(--r); padding: 12px 14px; overflow-x: auto; line-height: 1.9; }
+.formula .eq { white-space: nowrap; }
+.formula var { font-style: italic; font-family: var(--font-body); font-weight: 600; }
+.formula .c { color: var(--ink-2); font-family: var(--font-body); font-size: .85rem; white-space: normal; }
+dl.terms { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 12px 0 0; max-width: 78ch; }
+dl.terms dt { font-family: var(--font-mono); font-weight: 500; } dl.terms dd { margin: 0; color: var(--ink-2); }
+svg.flow { display: block; width: 100%; min-width: 760px; height: auto; }
+svg.flow .bx { fill: var(--panel); stroke: var(--rule); stroke-width: 2; }
+svg.flow .bx.key { fill: var(--sunk); }
+svg.flow .lane { fill: none; stroke: var(--rule); stroke-width: 1; stroke-dasharray: 4 4; opacity: .6; }
+svg.flow text { fill: var(--ink); font-family: var(--font-body); font-size: 13px; }
+svg.flow text.t { font-family: var(--font-display); font-size: 15px; }
+svg.flow text.s { fill: var(--ink-2); font-size: 11.5px; }
+svg.flow .ar { stroke: var(--accent); stroke-width: 2; fill: none; marker-end: url(#arr); }
+svg.flow #arr path { fill: var(--accent); }
+.wf { position: relative; }
+.wf-row { display: grid; grid-template-columns: minmax(110px, 190px) minmax(0, 1fr) 64px 64px; gap: 10px; align-items: center; height: 28px; border-radius: 2px; }
+.wf-row:hover, .wf-row:focus { background: var(--sunk); outline: none; }
+.wf-row .lab { font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-row .val, .wf-row .run { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: .85rem; }
+.wf-row .run { color: var(--ink-2); }
+.wf-row.total { border-top: 2px solid var(--rule); height: 32px; font-weight: 600; }
+.wf-track { position: relative; height: 16px; }
+.wf-track .grid-l { position: absolute; top: -6px; bottom: -6px; width: 1px; background: var(--sunk); }
+.wf-track .zero { position: absolute; top: -6px; bottom: -6px; width: 1px; background: var(--ink-2); }
+.wf-track .seg { position: absolute; top: 2px; height: 12px; border-radius: 2px; min-width: 2px; }
+.wf-track .seg.gain { background: var(--gain); } .wf-track .seg.loss { background: var(--loss); } .wf-track .seg.tot { background: var(--ink); }
+.wf-head { display: grid; grid-template-columns: minmax(110px, 190px) minmax(0, 1fr) 64px 64px; gap: 10px; font-size: .78rem; color: var(--ink-2); margin-bottom: 4px; }
+.wf-axis { position: relative; height: 16px; } .wf-axis span { position: absolute; transform: translateX(-50%); font-family: var(--font-mono); font-size: .72rem; }
+.wf-head .r { text-align: right; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: .85rem; color: var(--ink-2); margin: 8px 0; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -1px; margin-right: 6px; }
+.wf-tip { position: absolute; pointer-events: none; background: var(--panel); border: 2px solid var(--rule); border-radius: var(--r); padding: 6px 10px; font-size: .85rem; box-shadow: 0 4px 14px rgba(0,0,0,.18); z-index: 3; min-width: 180px; }
+.wf-tip b { font-family: var(--font-display); font-weight: 400; }
+@media (max-width: 560px) { .wf-row, .wf-head { grid-template-columns: 96px minmax(0, 1fr) 52px; } .wf-row .run, .wf-head .run { display: none; } }
+
+.panel[hidden] { display: none !important; }
+.music-note { font-family: var(--font-display); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<header class="top">
+  <div class="wrap top-inner" style="padding-block:10px 0">
+    <div class="brand"><h1>BAKENOH V3</h1><span class="jp">馬券王V3</span></div>
+    <div class="seg" role="group" aria-label="Engine behaviour">
+      <button id="mode-orig" aria-pressed="true" title="Exactly what the 1993 cartridge computes, bugs included">1993 cartridge</button>
+      <button id="mode-fix" aria-pressed="false" title="Same model with the original programming bugs fixed">Bugs fixed</button>
+    </div>
+  </div>
+  <div class="wrap" style="padding-block:4px 0">
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button role="tab" data-tab="how" aria-selected="false"><span class="cursor">▶</span>How it works</button>
+      <button role="tab" data-tab="race" aria-selected="true"><span class="cursor">▶</span>Race</button>
+      <button role="tab" data-tab="horses" aria-selected="false"><span class="cursor">▶</span>Horses</button>
+      <button role="tab" data-tab="results" aria-selected="false"><span class="cursor">▶</span>Results</button>
+      <button role="tab" data-tab="settings" aria-selected="false"><span class="cursor">▶</span>Weights &amp; options</button>
+      <button role="tab" data-tab="library" aria-selected="false"><span class="cursor">▶</span>Courses, jockeys, races</button>
+    </nav>
+  </div>
+</header>
+
+
+<main class="wrap">
+  <div id="top-result" class="box" style="margin-top:14px; display:flex; flex-wrap:wrap; gap:8px 18px; align-items:center"></div>
+
+  <!-- RACE -->
+  <section class="panel" id="tab-race" style="margin-top:14px">
+    <div class="box">
+      <div class="row" style="justify-content:space-between"><h2>Race</h2><span class="hint" id="example-note"></span></div>
+      <div class="fields">
+        <label class="f" style="grid-column: span 2"><span>Race (preset)</span><select id="r-preset"></select></label>
+        <label class="f"><span>Race name</span><input type="text" id="r-name"></label>
+        <label class="f"><span>Racecourse</span><select id="r-course"></select></label>
+        <label class="f"><span>Distance (m)</span><input type="number" id="r-meters" min="800" max="4000" step="100"></label>
+        <label class="f"><span>Distance class</span><select id="r-dist"><option value="0">Short (≤1600 m)</option><option value="1">Mid (1700–2200 m)</option><option value="2">Long (≥2300 m)</option></select></label>
+        <label class="f"><span>Surface</span><select id="r-surface"><option value="0">Turf</option><option value="1">Dirt</option></select></label>
+        <label class="f"><span>Direction</span><select id="r-dir"><option value="0">Left-handed</option><option value="1">Right-handed</option></select></label>
+        <label class="f"><span>Circuit</span><select id="r-circuit"><option value="0">Inner</option><option value="1">Outer</option><option value="2">Single circuit</option></select></label>
+        <label class="f"><span>Weight rule</span><select id="r-wcond"><option value="0">Set weights (定量)</option><option value="1">Allowance (別定)</option><option value="2">Weight for age (馬齢)</option><option value="3">Handicap (ハンデ)</option></select></label>
+        <label class="f"><span>Track condition</span><select id="r-track"><option value="0">Firm (良)</option><option value="1">Good to soft (やや重)</option><option value="2">Soft (重)</option><option value="3">Heavy (不良)</option></select></label>
+        <label class="f check" style="align-self:end"><input type="checkbox" id="r-low"> Low-class race (¥9M and under)</label>
+      </div>
+      <p class="hint" style="margin-top:10px">Picking a preset fills in the conditions the cartridge stores for that race. You can still change them. Distance in metres sets the class automatically.</p>
+    </div>
+    <div class="box"><h3>Course tip</h3><p id="tip-text"></p><p class="hint" id="tip-src"></p></div>
+  </section>
+
+  <!-- HORSES -->
+  <section class="panel" id="tab-horses" hidden style="margin-top:14px">
+    <div class="box">
+      <div class="row" style="justify-content:space-between">
+        <h2>Horses</h2>
+        <div class="row"><button class="btn" id="h-add">Add horse</button><button class="btn" id="h-expand">Expand all</button><button class="btn" id="h-collapse">Collapse all</button><button class="btn danger" id="h-clear">Clear all horses</button></div>
+      </div>
+      <p class="hint">Horse number = draw order. Up to 18 runners; the cartridge needs at least 5 starters. Leave records at 0 if you don't know them; the game treats blanks the same way.</p>
+    </div>
+    <div id="horse-list" style="margin-top:14px"></div>
+  </section>
+
+  <!-- RESULTS -->
+  <section class="panel" id="tab-results" hidden style="margin-top:14px">
+    <div class="split">
+      <div>
+        <div class="box" id="res-comment"></div>
+        <div class="box"><h3>Predicted finishing order</h3><ol class="order" id="res-order"></ol><p class="hint" style="margin-top:10px" id="res-scale"></p></div>
+        <div class="box"><h3>Second opinion (pass 2)</h3><p class="hint">The game scores every horse twice. The second pass ignores past-race class and leans harder on today's signals. It only feeds the bet picks.</p><ol class="order" id="res-order2"></ol></div>
+      </div>
+      <div>
+        <div class="box"><h3>Horse-number picks <span class="hint">(馬連 quinella)</span></h3><div id="res-picks"></div></div>
+        <div class="box"><h3>Bracket picks <span class="hint">(枠連)</span></h3><div id="res-brackets"></div></div>
+        <div class="box"><h3>Why this horse scored what it did</h3>
+          <div class="row" style="margin-bottom:8px"><label class="f" style="flex:1"><span>Horse</span><select id="res-horse"></select></label></div>
+          <div class="scroll-x"><table class="parts" id="res-parts"></table></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="panel" id="tab-settings" hidden style="margin-top:14px">
+    <div class="grid cols-2">
+      <div class="box">
+        <h2>Item weights</h2>
+        <p class="hint">How much each kind of data counts. The cartridge offers 11 steps from 0% to 300%; 100% is the default.</p>
+        <div id="weights" class="fields" style="grid-template-columns: repeat(auto-fill, minmax(200px,1fr))"></div>
+        <div class="row" style="margin-top:12px"><button class="btn" id="w-reset">Reset all to 100%</button></div>
+        <p class="hint" id="w-note" style="margin-top:10px"></p>
+      </div>
+      <div class="box">
+        <h2>Options</h2>
+        <div class="grid" style="gap:10px">
+          <label class="check"><input type="checkbox" id="o-simple"> Simple input mode (かんりゃく): skips sex/age, paddock, body-weight ranges and other columns</label>
+          <label class="check"><input type="checkbox" id="o-narrow"> Narrow down the bet picks (しぼる)</label>
+        </div>
+        <h3 style="margin-top:16px">Questions to use</h3>
+        <p class="hint">Turning an item off works like the cartridge's "Set question items" screen: that data is ignored.</p>
+        <div id="questions" class="grid" style="gap:6px"></div>
+      </div>
+    </div>
+    <div class="box">
+      <h2>Save &amp; load</h2>
+      <p class="hint">Everything is saved in this browser automatically. Export to move a race or your edited library to another device.</p>
+      <div class="row">
+        <button class="btn" id="x-export">Export race + library</button>
+        <button class="btn" id="x-import">Import</button>
+        <button class="btn" id="x-example">Load example race</button>
+        <button class="btn" id="x-blank">New empty race</button>
+      </div>
+      <textarea id="x-text" style="margin-top:10px; width:100%; min-height:120px" class="mono" placeholder="Exported JSON appears here. Paste JSON here and press Import."></textarea>
+    </div>
+  </section>
+
+  <!-- LIBRARY -->
+  <section class="panel" id="tab-library" hidden style="margin-top:14px">
+    <div class="box">
+      <div class="row" style="justify-content:space-between"><h2>Courses, jockeys and races</h2><button class="btn danger" id="lib-reset">Restore 1993 cartridge data</button></div>
+      <p class="hint">The cartridge ships with the 1993 JRA world: 10 racecourses, 61 jockey ratings and 45 graded races. Edit them or add your own; changes save in this browser.</p>
+    </div>
+    <div class="box">
+      <div class="row" style="justify-content:space-between"><h3>Racecourses</h3><div class="row"><button class="btn small" id="c-add">Add course</button><button class="btn small danger" id="c-clear">Clear all</button><button class="btn small" id="c-restore">Restore 1993</button></div></div>
+      <div class="row" style="margin-bottom:10px"><label class="f" style="flex:1; max-width:340px"><span>Edit course</span><select id="c-pick"></select></label></div>
+      <div id="c-edit"></div>
+    </div>
+    <div class="box">
+      <div class="row" style="justify-content:space-between"><h3>Jockeys</h3><div class="row"><button class="btn small" id="j-add">Add jockey</button><button class="btn small danger" id="j-clear">Clear all</button><button class="btn small" id="j-restore">Restore 1993</button></div></div>
+      <p class="hint">Points at 100% weight. Base always counts; the others count when today's race or the horse's running style matches.</p>
+      <div class="scroll-x"><table class="lib" id="j-table"></table></div>
+    </div>
+    <div class="box">
+      <div class="row" style="justify-content:space-between"><h3>Race presets</h3><div class="row"><button class="btn small" id="rp-add">Add race</button><button class="btn small danger" id="rp-clear">Clear all</button><button class="btn small" id="rp-restore">Restore 1993</button></div></div>
+      <div class="scroll-x"><table class="lib" id="rp-table"></table></div>
+    </div>
+  </section>
+
+  <!-- HOW -->
+  <section class="panel" id="tab-how" hidden style="margin-top:14px">
+    <div class="box">
+      <h2>The 1993 TV commercial</h2>
+      <a class="video" href="https://youtu.be/dnHHiFlP16U" target="_blank" rel="noopener" aria-label="Watch the 1993 Bakenoh V3 TV commercial on YouTube">
+        <img src="https://i.ytimg.com/vi/dnHHiFlP16U/maxresdefault.jpg" onerror="this.onerror=null;this.src='https://i.ytimg.com/vi/dnHHiFlP16U/hqdefault.jpg'" alt="Still from the 1993 Bakenoh V3 TV commercial">
+        <span class="play" aria-hidden="true">▶</span>
+      </a>
+    </div>
+    <div class="box eli5">
+      <h2>How Bakenoh V3 picks a winner</h2>
+      <p>Every horse gets a single score. It starts from the horse's past results, then gains or loses points for each piece of data you enter about it. The highest score is the predicted winner. The method is fixed point tables and hand-written rules, so the same inputs always give the same answer.</p>
+      <ol>
+        <li><b>Starting mark from past results.</b> Each of the last four races is worth points depending on its class (a G1 counts for far more than a maiden race) and where the horse finished. Winning by a big margin is worth more than a close win; losing by a nose costs less than losing by ten lengths. The record at today's distance is averaged in.
+          <div class="why">Probable reason: the newspaper form guide is the most reliable data a 1993 punter had, so it sets the baseline.</div></li>
+        <li><b>A ruler for the race.</b> The game takes the field's average starting mark and divides it by nine. That number is the value of "one point" in this race, so a bonus means the same thing in a race of champions as in a race of maidens.
+          <div class="why">Probable reason: keeps all the small bonuses in proportion, whatever class the race is.</div></li>
+        <li><b>Plus and minus points for everything else.</b> Training reports, the jockey, paddock looks, the marks you copied from the paper, sex and age for the distance, best distance and track type, the odds, and a few more. Each is worth roughly −3 to +4 points, multiplied by the weight you set for that item.
+          <div class="why">Probable reason: simple tables that a designer could tune by hand and that ran fast on a 4 MHz Game Boy.</div></li>
+        <li><b>Track knowledge.</b> Hand-written rules for each racecourse: closers do well at Tokyo, struggle at Nakayama; inside draws help at Hanshin; a lone front-runner tends to hold on everywhere. Big fields punish the widest draws.
+          <div class="why">Probable reason: this is the "expert" content the box sold on, the same wisdom as the course tips you read on screen.</div></li>
+        <li><b>Rank, then pair up.</b> Horses are sorted by total. For bets the game runs a second scoring pass that drops the starting mark and leans on today's signals, then looks at pairs inside the top six of both lists. Pairs are sorted by how much they'd pay (the product of the two odds) into favorite, mid-price and longshot picks.
+          <div class="why">Probable reason: in 1993 the popular bets were quinellas (馬連, introduced 1991) and bracket quinellas (枠連); picking pairs by price gives a punter a sensible spread.</div></li>
+        <li><b>A sentence to finish.</b> If many horses score within 20% of the leader the race is "wide open"; if the leader is far ahead it's "a safe bet". The number of non-favorite picks decides whether to promise a big payout.</li>
+      </ol>
+      <p>When young horses (2-year-olds) or a low-class race are involved, the game switches to a second weight table: form and records are almost ignored and only the jockey, your marks and the odds count, presumably because those horses have too little history to trust.</p>
+    </div>
+
+    <div class="box">
+      <h2>The original formula</h2>
+      <p>Exactly what the cartridge computes for horse <var>h</var>, in whole numbers (every division rounds down).</p>
+      <div class="formula">
+        <div class="eq">score<sub>1</sub>(<var>h</var>) = <var>B</var>(<var>h</var>) + Σ<sub>items</sub> ⌊ <var>e</var>(<var>h</var>) · <var>U</var> · <var>w</var>% ⌋ + Σ<sub>rules</sub> <var>r</var>(<var>h</var>) · <var>U</var></div>
+        <div class="eq">score<sub>2</sub>(<var>h</var>) = &nbsp;&nbsp;&nbsp;&nbsp;0 &nbsp;&nbsp;+ Σ<sub>items</sub> ⌊ <var>e</var>′(<var>h</var>) · <var>U</var> · <var>w</var>% ⌋ + Σ<sub>rules</sub> 2·<var>r</var>(<var>h</var>) · <var>U</var></div>
+        <div class="eq">&nbsp;</div>
+        <div class="eq"><var>B</var>(<var>h</var>) = ½ · ( <var>D</var>(<var>h</var>) + <var>F</var>(<var>h</var>) )</div>
+        <div class="eq"><var>D</var>(<var>h</var>) = <span>(5000·1st + 2500·2nd + 1000·3rd + 250·unplaced) ÷ (2·runs + 9)</span> · <var>w</var><sub>distance</sub>% <span class="c">&nbsp;record at today's distance</span></div>
+        <div class="eq"><var>F</var>(<var>h</var>) = Σ<sub>last 4 races</sub> ½ · ( <var>T</var><sub>finish</sub>[class][place] + <var>T</var><sub>margin</sub>[class][margin] ) ÷ <var>k</var> · <var>w</var><sub>form</sub>% <span class="c">&nbsp;<var>k</var> = 11, 13, 15, 17 for 1–4 races run</span></div>
+        <div class="eq"><var>U</var> = max( 10, ⌊ average <var>B</var> ÷ 9 ⌋ ) <span class="c">&nbsp;the value of one point in this race</span></div>
+      </div>
+      <dl class="terms">
+        <dt>e(h)</dt><dd>points from the item tables, usually −3 to +4: training, jockey, marks, paddock, sex &amp; age, best distance, best course type, records, popularity, body weight. Pass 2 (<var>e</var>′) uses its own, usually larger, tables.</dd>
+        <dt>records</dt><dd>exception: course record, racecourse record and heavy-track record add their record score (the same 5000/2500/1000/250 formula as <var>D</var>, divided by 2–10) × <var>w</var>% directly, without <var>U</var>.</dd>
+        <dt>w%</dt><dd>your item weight, 0–300% (default 100%). In juvenile and ¥9M-and-under races only jockey, marks and odds keep their weight.</dd>
+        <dt>r(h)</dt><dd>course and race rules, not affected by weights: track bias by running style and draw, lone front-runner, big-field draw penalty, soft-ground outsiders.</dd>
+        <dt>T tables</dt><dd>a G1 win by 0.3 s or more is worth 6000 + 6000; a maiden win about 100 + 100. Full tables in <span class="mono">prediction.md</span>.</dd>
+        <dt>Ranking</dt><dd>sort by score<sub>1</sub> for the finishing order. Bet picks are pairs inside the top 6 of both score<sub>1</sub> and score<sub>2</sub>, ordered by round(odds<sub>A</sub>) × round(odds<sub>B</sub>).</dd>
+      </dl>
+    </div>
+    <div class="box">
+      <h2>How the pieces fit</h2>
+      <div class="scroll-x">
+      <svg class="flow" viewBox="0 0 960 330" role="img" aria-labelledby="flow-t">
+        <title id="flow-t">Flow from inputs to base score, the scale U, two scoring passes, rankings and picks</title>
+        <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
+        <rect class="bx" x="10" y="20" width="170" height="78" rx="3"/><text class="t" x="24" y="46">Your inputs</text><text class="s" x="24" y="66">form, records, jockey,</text><text class="s" x="24" y="82">paddock, odds, marks…</text>
+        <rect class="bx key" x="230" y="20" width="220" height="78" rx="3"/><text class="t" x="244" y="46">Base score B</text><text class="s" x="244" y="66">½ × (distance record</text><text class="s" x="244" y="82">+ last four races)</text>
+        <rect class="bx key" x="500" y="20" width="200" height="78" rx="3"/><text class="t" x="514" y="46">Ruler U</text><text class="s" x="514" y="66">average B ÷ 9, at least 10</text><text class="s" x="514" y="82">= one point in this race</text>
+        <rect class="bx" x="750" y="20" width="200" height="78" rx="3"/><text class="t" x="764" y="46">Your weights w%</text><text class="s" x="764" y="66">0–300% per item</text><text class="s" x="764" y="82">(250% paddock bug)</text>
+        <path class="ar" d="M180,59 H226"/><path class="ar" d="M450,59 H496"/>
+        <rect class="lane" x="10" y="128" width="940" height="82" rx="3"/><text class="s" x="18" y="146">PASS 1</text>
+        <rect class="bx" x="70" y="150" width="130" height="48" rx="3"/><text x="84" y="179">start at B</text>
+        <rect class="bx" x="230" y="150" width="250" height="48" rx="3"/><text x="244" y="172">+ 34 item points</text><text class="s" x="244" y="188">e × U × w%</text>
+        <rect class="bx" x="510" y="150" width="200" height="48" rx="3"/><text x="524" y="172">+ course &amp; race rules</text><text class="s" x="524" y="188">r × U</text>
+        <rect class="bx key" x="740" y="150" width="200" height="48" rx="3"/><text class="t" x="754" y="180">Finishing order</text>
+        <path class="ar" d="M200,174 H226"/><path class="ar" d="M480,174 H506"/><path class="ar" d="M710,174 H736"/>
+        <rect class="lane" x="10" y="222" width="940" height="82" rx="3"/><text class="s" x="18" y="240">PASS 2</text>
+        <rect class="bx" x="70" y="244" width="130" height="48" rx="3"/><text x="84" y="273">start at 0</text>
+        <rect class="bx" x="230" y="244" width="250" height="48" rx="3"/><text x="244" y="266">+ 34 item points</text><text class="s" x="244" y="282">bigger tables, e′ × U × w%</text>
+        <rect class="bx" x="510" y="244" width="200" height="48" rx="3"/><text x="524" y="266">+ course &amp; race rules</text><text class="s" x="524" y="282">2r × U</text>
+        <rect class="bx key" x="740" y="244" width="200" height="48" rx="3"/><text class="t" x="754" y="266">Bet picks</text><text class="s" x="754" y="282">top-6 pairs by odds × odds</text>
+        <path class="ar" d="M200,268 H226"/><path class="ar" d="M480,268 H506"/><path class="ar" d="M710,268 H736"/>
+        <path class="ar" d="M600,98 V146"/><path class="ar" d="M850,98 C850,120 380,118 356,146"/><path class="ar" d="M340,98 V112 H135 V146"/>
+        <path class="ar" d="M840,198 V240"/>
+      </svg>
+      </div>
+      <p class="hint" style="margin-top:8px">Pass 1 also decides the commentary ("Wide open!", "A safe bet!" …) from how close the top scores are.</p>
+    </div>
+    <div class="box">
+      <div class="row" style="justify-content:space-between; align-items:flex-end">
+        <div><h2>Watch a score being built</h2><p class="hint" style="margin:0">Live: uses the race on the Race and Horses tabs. Hover a row for details.</p></div>
+        <div class="row">
+          <label class="f"><span>Horse</span><select id="wf-horse"></select></label>
+          <div class="seg" role="group" aria-label="Scoring pass"><button id="wf-p0" aria-pressed="true">Pass 1</button><button id="wf-p1" aria-pressed="false">Pass 2</button></div>
+        </div>
+      </div>
+      <div class="legend"><span><i style="background:var(--gain)"></i>Points gained</span><span><i style="background:var(--loss)"></i>Points lost</span><span><i style="background:var(--ink)"></i>Total</span></div>
+      <div class="wf" id="wf"></div>
+      <p class="hint" id="wf-note" style="margin-top:8px"></p>
+    </div>
+    <div class="box">
+      <h3>Bugs in the 1993 cartridge</h3>
+      <p class="hint">"1993 cartridge" mode reproduces these exactly; "Bugs fixed" mode does what the code clearly meant to do.</p>
+      <ul class="bugs">
+        <li><b>Body weight is ignored.</b> Two comparisons read a memory address instead of the value stored there, so the game always thinks the weight change is small and inside the horse's winning range. Every horse gets the same body-weight bonus.</li>
+        <li><b>Paddock counts 250%.</b> The weight lookup wraps around in 8 bits, so the paddock item reads the wrong slot: its default "100%" is really 250%, and high settings drop to 0–30%. Win odds at the top settings drop to 0–30% too.</li>
+        <li><b>Right-handed dirt is mixed up.</b> The course-record check for right-handed dirt tests for a left-handed race, so at Nakayama or Kyoto dirt nothing counts as "today's course type".</li>
+        <li><b>Under-rated favorite bonus misfires.</b> The +16 bonus for a marked favorite with a low score uses unsigned maths, so horses with negative scores never get it.</li>
+        <li><b>Odds-rank ties.</b> The tie check for popularity ranking always compares the same two middle horses.</li>
+        <li><b>Fresh-horse record.</b> One comparison is the wrong way round, so the best bonus for horses that run well fresh can never be earned.</li>
+        <li><b>Scratched horses</b> are still counted when ranking by odds and body weight, and "Upset brewing!" can never be shown.</li>
+      </ul>
+    </div>
+    <div class="box"><p class="hint">Engine ported from the cartridge's code and checked against the original game running in a recompiled build: 120 randomly generated races, identical scores, rankings, picks and commentary. Unofficial fan project; not affiliated with Asmik.</p></div>
+  </section>
+</main>
+
+<script id="bkv3-data" type="application/json">/*DATA*/</script>
+<script>/*ENGINE*/</script>
+<script>
+(function () {
+'use strict';
+const $ = s => document.querySelector(s), $$ = s => Array.from(document.querySelectorAll(s));
+const ROM = JSON.parse(document.getElementById('bkv3-data').textContent);
+const clone = o => JSON.parse(JSON.stringify(o));
+const store = {
+  get(k) { try { const v = localStorage.getItem('bkv3.' + k); return v ? JSON.parse(v) : null; } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem('bkv3.' + k, JSON.stringify(v)); } catch (e) {} }
+};
+const STYLES = ['Front-runner (逃げ)', 'Stalker (先行)', 'Closer (差し)', 'Deep closer (追込)', 'Versatile (自在)'];
+const STYLE_SHORT = ['Front', 'Stalker', 'Closer', 'Deep closer', 'Versatile'];
+const MARKS = ['–', '◎', '○', '△', '×'];
+const MARK_NAMES = ['No mark', '◎ Top pick', '○ Second pick', '△ Outside chance', '× Ignore'];
+const CLASSES = ['G1', 'G2', 'G3', 'Open', '¥15M class', '¥9M class', '¥5M class', 'Maiden', 'Debut', 'Other', 'Layoff (no race)'];
+const TRAIN = ['Very poor', 'Poor', 'Average', 'Good', 'Very good'];
+const EXCITE = ['Worked up', 'Normal', 'Arched neck (keen)'], SWEAT = ['Heavy', 'A little', 'None'], COAT = ['Dull', 'Normal', 'Glossy'];
+const RECROWS = ['1st', '2nd', '3rd', 'Unplaced'];
+const QUESTIONS = [['sexage', 'Sex & age'], ['distance', 'Distance record'], ['course', 'Course record'], ['track', 'Racecourse record'],
+  ['fresh', 'Record when fresh'], ['training', 'Training'], ['body', 'Body weight'], ['marks', 'Prediction marks'], ['paddock', 'Paddock']];
+
+let lib = store.get('lib') || { courses: ROM.courses, jockeys: ROM.jockeys, races: ROM.races, rules: ROM.rules };
+let S = store.get('state');
+let fixBugs = !!store.get('fix');
+
+// ---------- state helpers ----------
+const rec0 = () => [0, 0, 0, 0];
+function newHorse(i) {
+  return { name: 'Horse ' + (i + 1), sex: 0, age: 1, jockey: 'j61', weight: 55, style: 1, distRec: [rec0(), rec0(), rec0(), rec0()],
+    courseRec: [rec0(), rec0(), rec0(), rec0()], trackRec: rec0(), freshRec: rec0(),
+    form: [0, 1, 2, 3].map(() => ({ c: 10, f: 0, m: 0 })), training: 2, bwLast: 0, bwLow: 0, bwHigh: 0, bwToday: 0, mark: 0,
+    excite: 1, sweat: 1, coat: 1, odds: 100, scratched: false };
+}
+function baseCfg() { return { simple: false, track: 0, narrow: false, weights: Array(13).fill(5),
+  questions: { sexage: true, distance: true, course: true, track: true, fresh: true, training: true, body: true, marks: true, paddock: true } }; }
+function example() {
+  const jk = n => (lib.jockeys.find(j => j.name === n) || { id: 'j61' }).id;
+  const H = (name, sex, age, jockey, style, odds, mark, form, dist, extra) => Object.assign(newHorse(0), { name, sex, age, jockey: jk(jockey), style, odds, mark,
+    form: form.map(([c, f, m]) => ({ c, f, m })), distRec: [rec0(), rec0(), dist, rec0()] }, extra || {});
+  const horses = [
+    H('Midnight Kaiser', 0, 2, 'Yutaka Take', 1, 32, 1, [[2,0,2],[1,1,1],[0,2,3],[0,0,1]], [3,2,1,1], { training: 3, bwToday: 478, bwLast: 476, excite: 2, coat: 2 }),
+    H('Silver Monsoon', 0, 3, 'Yukio Okabe', 2, 45, 2, [[0,1,1],[0,3,4],[1,0,3],[0,2,2]], [2,3,1,2], { training: 2, bwToday: 490, bwLast: 486 }),
+    H('Crimson Lantern', 1, 2, 'Masato Shibata', 1, 78, 3, [[1,0,1],[1,2,2],[0,4,5],[1,0,0]], [2,1,2,2], { training: 3 }),
+    H('Harbor Light', 0, 4, 'Norihiro Yokoyama', 3, 95, 0, [[0,5,6],[1,1,2],[0,6,8],[0,3,3]], [1,2,2,4], { training: 2, sweat: 0 }),
+    H('Paper Crane', 0, 2, 'Hiroshi Kawachi', 0, 120, 0, [[2,0,4],[2,1,1],[3,0,2],[1,4,5]], [1,1,0,2], { training: 4 }),
+    H('Tsukuba Wind', 0, 3, 'Shoichi Osaki', 2, 160, 0, [[1,3,4],[1,2,3],[0,7,9],[0,8,11]], [1,2,1,3], {}),
+    H('Bamboo Comet', 1, 3, 'Katsumi Minai', 1, 210, 0, [[3,0,3],[2,2,2],[2,4,6],[1,6,8]], [1,0,1,2], { excite: 0 }),
+    H('Old Lighthouse', 0, 5, 'Hitoshi Matoba', 3, 350, 4, [[0,9,12],[0,10,15],[1,5,7],[1,8,9]], [2,2,3,6], { training: 1 }),
+    H('Lucky Abacus', 0, 3, 'Hiroshi Gohara', 0, 480, 0, [[3,1,1],[3,3,4],[2,7,9],[2,9,11]], [0,1,1,3], {}),
+    H('Quiet Typhoon', 0, 4, 'Seiki Tabara', 2, 640, 0, [[2,5,6],[1,9,12],[1,11,15],[0,12,15]], [1,0,2,5], { training: 1, coat: 0 })
+  ];
+  return { presetId: 'r15', example: true, race: raceFromPreset(lib.races.find(r => r.id === 'r15')), cfg: baseCfg(), horses };
+}
+function raceFromPreset(p) {
+  const meters = [1600, 2000, 2500][p.dist];
+  return { name: p.name, course: p.course, meters, dist: p.dist, surface: p.surface, dir: p.dir, circuit: p.circuit, wcond: p.wcond, lowClass: !!p.lowClass, presetId: p.id };
+}
+if (!S) S = example();
+function save() { store.set('state', S); store.set('lib', lib); store.set('fix', fixBugs); }
+
+// ---------- generic field binding ----------
+function opts(list, sel) { return list.map((t, i) => `<option value="${i}"${i === sel ? ' selected' : ''}>${esc(t)}</option>`).join(''); }
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+const NO_COURSE = { id: 'none', name: 'No racecourse', dir: 0, circuits: false, tips: {} };
+const courseById = id => lib.courses.find(c => c.id === id) || lib.courses[0] || NO_COURSE;
+function twoStep(btn, label, fn) { btn.addEventListener('click', () => { if (!btn.dataset.armed) { btn.dataset.armed = '1'; const t = btn.textContent; btn.textContent = label; btn._t = setTimeout(() => { delete btn.dataset.armed; btn.textContent = t; }, 4000); btn._orig = t; return; }
+  clearTimeout(btn._t); delete btn.dataset.armed; btn.textContent = btn._orig; fn(); }); }
+
+// ---------- RACE TAB ----------
+function renderRace() {
+  const r = S.race;
+  $('#r-preset').innerHTML = `<option value="">Custom race</option>` + ['G1', 'G2', '1500+', '900-', 'custom'].map(g => {
+    const rs = lib.races.filter(x => (x.grade || 'custom') === g); if (!rs.length) return '';
+    const label = { G1: 'G1 races (1993)', G2: 'Other graded races (1993)', '1500+': 'Generic classes', '900-': 'Generic classes', custom: 'Your races' }[g];
+    return `<optgroup label="${label}">` + rs.map(x => `<option value="${x.id}"${x.id === S.presetId ? ' selected' : ''}>${esc(x.name)}</option>`).join('') + '</optgroup>';
+  }).join('');
+  $('#r-name').value = r.name || '';
+  $('#r-course').innerHTML = (lib.courses.length ? '' : '<option value="none">No racecourses (add one under Courses, jockeys, races)</option>') + lib.courses.map(c => `<option value="${c.id}"${c.id === r.course ? ' selected' : ''}>${esc(c.name)}</option>`).join('');
+  $('#r-meters').value = r.meters || '';
+  $('#r-dist').value = r.dist; $('#r-surface').value = r.surface; $('#r-dir').value = r.dir; $('#r-circuit').value = r.circuit;
+  $('#r-wcond').value = r.wcond; $('#r-track').value = S.cfg.track; $('#r-low').checked = !!r.lowClass;
+  const c = courseById(r.course);
+  $('#r-circuit').disabled = !c.circuits;
+  $('#example-note').textContent = S.example ? 'Example race with fictional horses. Replace it with a real race card.' : '';
+  renderTip();
+}
+function renderTip() {
+  const r = S.race, p = lib.races.find(x => x.id === S.presetId);
+  if (p && p.tip) { $('#tip-text').textContent = p.tip; $('#tip-src').textContent = 'Advice for ' + p.name + '.'; return; }
+  const c = courseById(r.course), key = (r.surface ? 'dirt' : 'turf') + '-' + r.dist, t = (c.tips || {})[key];
+  $('#tip-text').textContent = t || 'There is no data for this course.';
+  $('#tip-src').textContent = `Advice for ${c.name}, ${r.surface ? 'dirt' : 'turf'}, ${['short', 'mid', 'long'][r.dist]} distance. Edit tips under Courses, jockeys, races.`;
+}
+function bindRace() {
+  $('#r-preset').addEventListener('change', e => {
+    const p = lib.races.find(x => x.id === e.target.value);
+    S.presetId = e.target.value || null;
+    if (p) { S.race = raceFromPreset(p);
+      if (S.horses.every(h => h.age === 1 && h.sex === 0)) S.horses.forEach(h => { h.age = p.age; h.sex = p.sex; }); }
+    S.example = false; changed(); renderRace(); renderHorses();
+  });
+  const num = (id, key, after) => $(id).addEventListener('change', e => { S.race[key] = +e.target.value; after && after(); S.example = false; changed(); renderRace(); });
+  $('#r-name').addEventListener('input', e => { S.race.name = e.target.value; save(); });
+  $('#r-course').addEventListener('change', e => { const c = courseById(e.target.value); S.race.course = c.id; S.race.dir = c.dir; S.race.circuit = c.circuits ? 0 : 2; changed(); renderRace(); });
+  $('#r-meters').addEventListener('change', e => { const m = +e.target.value; S.race.meters = m; if (m) S.race.dist = m < 1700 ? 0 : m < 2300 ? 1 : 2; changed(); renderRace(); });
+  num('#r-dist', 'dist'); num('#r-surface', 'surface'); num('#r-dir', 'dir'); num('#r-circuit', 'circuit'); num('#r-wcond', 'wcond');
+  $('#r-track').addEventListener('change', e => { S.cfg.track = +e.target.value; changed(); });
+  $('#r-low').addEventListener('change', e => { S.race.lowClass = e.target.checked; changed(); });
+}
+
+// ---------- HORSES TAB ----------
+function jockeyOptions(sel) {
+  return `<option value="j61"${sel === 'j61' ? ' selected' : ''}>Not set</option>` + lib.jockeys.map(j => `<option value="${j.id}"${j.id === sel ? ' selected' : ''}>${esc(j.name)}</option>`).join('');
+}
+function recTable(path, cols, grid) {
+  // grid: array of 4-arrays (columns) ; rows = finishes
+  return `<table class="rec"><tr><th></th>${cols.map(c => `<th>${c}</th>`).join('')}</tr>` + RECROWS.map((rn, f) =>
+    `<tr><th>${rn}</th>${cols.map((c, g) => `<td><input type="number" min="0" max="15" data-k="${path}.${g}.${f}" value="${grid[g][f]}" aria-label="${c} ${rn}"></td>`).join('')}</tr>`).join('') + '</table>';
+}
+function horseCard(h, i, open) {
+  const c = courseById(S.race.course);
+  const odds = (h.odds / 10).toFixed(1);
+  return `<details class="horse${h.scratched ? ' scratched' : ''}" data-i="${i}"${open ? ' open' : ''}>
+  <summary><span class="no">${i + 1}</span><span class="nm">${esc(h.name)}</span>
+    <span class="meta hide-sm">${esc((lib.jockeys.find(j => j.id === h.jockey) || { name: 'No jockey' }).name)}</span>
+    <span class="meta hide-sm">${STYLE_SHORT[h.style]}</span><span class="meta num">${h.scratched ? 'Scratched' : odds + '×'}</span>
+    <span class="mark hide-sm">${MARKS[h.mark]}</span><span class="caret">▶</span></summary>
+  <div class="body">
+    <div class="fields" style="margin-top:12px">
+      <label class="f"><span>Name</span><input type="text" data-k="name" value="${esc(h.name)}"></label>
+      <label class="f"><span>Jockey</span><select data-k="jockey" data-type="str">${jockeyOptions(h.jockey)}</select></label>
+      <label class="f"><span>Running style</span><select data-k="style">${opts(STYLES, h.style)}</select></label>
+      <label class="f"><span>Win odds (×)</span><input type="number" step="0.1" min="0" max="999.9" data-k="odds" data-scale="10" value="${odds}"></label>
+      <label class="f"><span>Your mark</span><select data-k="mark">${opts(MARK_NAMES, h.mark)}</select></label>
+      <label class="f"><span>Sex</span><select data-k="sex">${opts(['Colt / horse', 'Filly / mare'], h.sex)}</select></label>
+      <label class="f"><span>Age (modern count)</span><select data-k="age">${opts(['2', '3', '4', '5', '6', '7', '8', '9+'], h.age)}</select></label>
+      <label class="f"><span>Weight carried (kg)</span><input type="number" min="40" max="70" data-k="weight" value="${h.weight}"></label>
+      <label class="f"><span>Training report</span><select data-k="training">${opts(TRAIN, h.training)}</select></label>
+      <label class="f check" style="align-self:end"><input type="checkbox" data-k="scratched"${h.scratched ? ' checked' : ''}> Scratched</label>
+    </div>
+    <h4>Last four races</h4>
+    <div class="scroll-x"><table class="rec"><tr><th></th><th>Class</th><th>Finish</th><th>Margin (s)</th></tr>
+    ${['4 races ago', '3 races ago', '2 races ago', 'Last race'].map((n, k) => `<tr><th>${n}</th>
+      <td><select data-k="form.${k}.c">${opts(CLASSES, h.form[k].c)}</select></td>
+      <td><select data-k="form.${k}.f"${h.form[k].c === 10 ? ' disabled' : ''}>${opts(Array.from({ length: 18 }, (_, j) => (j + 1) + (['st', 'nd', 'rd'][j] || 'th')), h.form[k].f)}</select></td>
+      <td><select data-k="form.${k}.m"${h.form[k].c === 10 ? ' disabled' : ''}>${opts(Array.from({ length: 16 }, (_, j) => j < 15 ? (j / 10).toFixed(1) : '1.5+'), h.form[k].m)}</select></td></tr>`).join('')}
+    </table></div>
+    <p class="hint">Margin: for a winner, how far ahead of second; otherwise, how far behind the winner. Mark a race slot as "Layoff" if the horse didn't run.</p>
+    <h4>Record by distance</h4><div class="scroll-x">${recTable('distRec', ['Short', 'Mid', 'Long', 'Heavy track'], h.distRec)}</div>
+    <h4>Record by course type</h4><div class="scroll-x">${recTable('courseRec', ['Left turf', 'Left dirt', 'Right turf', 'Right dirt'], h.courseRec)}</div>
+    <div class="grid cols-2" style="margin-top:6px">
+      <div><h4>Record at ${esc(c.name)}</h4>${recTable('trackRec', ['Runs'], [h.trackRec])}</div>
+      <div><h4>Record when fresh</h4>${recTable('freshRec', ['Runs'], [h.freshRec])}<p class="hint">First run after a layoff. Only used when the last race slot is "Layoff".</p></div>
+    </div>
+    <h4>Body weight (kg)</h4>
+    <div class="fields">
+      <label class="f"><span>Today</span><input type="number" min="0" max="639" data-k="bwToday" value="${h.bwToday || ''}"></label>
+      <label class="f"><span>Last race</span><input type="number" min="0" max="639" data-k="bwLast" value="${h.bwLast || ''}"></label>
+      <label class="f"><span>Winning weight, low</span><input type="number" min="0" max="639" data-k="bwLow" value="${h.bwLow || ''}"></label>
+      <label class="f"><span>Winning weight, high</span><input type="number" min="0" max="639" data-k="bwHigh" value="${h.bwHigh || ''}"></label>
+    </div>
+    <h4>Paddock</h4>
+    <div class="fields">
+      <label class="f"><span>Excitement</span><select data-k="excite">${opts(EXCITE, h.excite)}</select></label>
+      <label class="f"><span>Sweating</span><select data-k="sweat">${opts(SWEAT, h.sweat)}</select></label>
+      <label class="f"><span>Coat</span><select data-k="coat">${opts(COAT, h.coat)}</select></label>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn small" data-act="up">Move up</button><button class="btn small" data-act="down">Move down</button>
+      <button class="btn small" data-act="dup">Duplicate</button><button class="btn small danger" data-act="del">Remove</button>
+    </div>
+  </div></details>`;
+}
+function renderHorses() {
+  const openSet = new Set($$('#horse-list details[open]').map(d => +d.dataset.i));
+  $('#horse-list').innerHTML = S.horses.map((h, i) => horseCard(h, i, openSet.has(i))).join('') || '<div class="box"><p class="hint" style="margin:0">No horses yet. Use Add horse to enter the field.</p></div>';
+}
+function setPath(obj, path, v) { const ks = path.split('.'); let o = obj; for (let k = 0; k < ks.length - 1; k++) o = o[ks[k]]; o[ks[ks.length - 1]] = v; }
+function bindHorses() {
+  const list = $('#horse-list');
+  list.addEventListener('change', e => {
+    const el = e.target, k = el.dataset.k; if (!k) return;
+    const i = +el.closest('details').dataset.i, h = S.horses[i];
+    let v;
+    if (el.type === 'checkbox') v = el.checked;
+    else if (el.dataset.type === 'str' || el.type === 'text') v = el.value;
+    else { v = +el.value || 0; if (el.dataset.scale) v = Math.round(v * +el.dataset.scale);
+      if (/Rec/.test(k)) v = Math.max(0, Math.min(15, Math.round(v)));
+      if (k === 'weight') v = Math.max(40, Math.min(70, Math.round(v)));
+      if (/^bw/.test(k)) v = v ? Math.max(390, Math.min(639, Math.round(v))) : 0;
+      if (k === 'odds') v = Math.max(0, Math.min(9999, v)); }
+    setPath(h, k, v);
+    if (k === 'scratched' && S.horses.filter(x => !x.scratched).length < 2) { h.scratched = false; }
+    S.example = false; changed();
+    if (/^(name|jockey|style|odds|mark|scratched)$/.test(k) || /form\.\d\.c/.test(k)) renderHorses();
+  });
+  list.addEventListener('click', e => {
+    const b = e.target.closest('button[data-act]'); if (!b) return;
+    const i = +b.closest('details').dataset.i, a = b.dataset.act;
+    if (a === 'del') S.horses.splice(i, 1);
+    if (a === 'dup') { if (S.horses.length >= 18) return; const c = clone(S.horses[i]); c.name += ' (copy)'; S.horses.splice(i + 1, 0, c); }
+    if (a === 'up' && i > 0) [S.horses[i - 1], S.horses[i]] = [S.horses[i], S.horses[i - 1]];
+    if (a === 'down' && i < S.horses.length - 1) [S.horses[i + 1], S.horses[i]] = [S.horses[i], S.horses[i + 1]];
+    changed(); renderHorses();
+  });
+  $('#h-add').addEventListener('click', () => { if (S.horses.length >= 18) return; S.horses.push(newHorse(S.horses.length)); changed(); renderHorses();
+    const last = $$('#horse-list details').pop(); if (last) { last.open = true; last.scrollIntoView({ block: 'nearest' }); } });
+  twoStep($('#h-clear'), 'Click again to remove every horse', () => { S.horses = []; S.example = false; changed(); renderHorses(); });
+  $('#h-expand').addEventListener('click', () => $$('#horse-list details').forEach(d => d.open = true));
+  $('#h-collapse').addEventListener('click', () => $$('#horse-list details').forEach(d => d.open = false));
+}
+
+// ---------- SETTINGS ----------
+const PCTS = [0, 10, 20, 30, 60, 100, 120, 150, 200, 250, 300];
+function renderSettings() {
+  $('#weights').innerHTML = BKV3.ITEMS.map((n, i) => `<label class="f"><span>${n}</span><select data-w="${i}">${PCTS.map((p, l) => `<option value="${l}"${S.cfg.weights[i] === l ? ' selected' : ''}>${p}%${l === 5 ? ' (default)' : ''}</option>`).join('')}</select></label>`).join('');
+  $('#questions').innerHTML = QUESTIONS.map(([k, n]) => `<label class="check"><input type="checkbox" data-q="${k}"${S.cfg.questions[k] ? ' checked' : ''}> ${n}</label>`).join('');
+  $('#o-simple').checked = S.cfg.simple; $('#o-narrow').checked = S.cfg.narrow;
+}
+function bindSettings() {
+  $('#weights').addEventListener('change', e => { S.cfg.weights[+e.target.dataset.w] = +e.target.value; changed(); });
+  $('#questions').addEventListener('change', e => { S.cfg.questions[e.target.dataset.q] = e.target.checked; changed(); });
+  $('#o-simple').addEventListener('change', e => { S.cfg.simple = e.target.checked; changed(); });
+  $('#o-narrow').addEventListener('change', e => { S.cfg.narrow = e.target.checked; changed(); });
+  $('#w-reset').addEventListener('click', () => { S.cfg.weights = Array(13).fill(5); renderSettings(); changed(); });
+  $('#x-export').addEventListener('click', () => { $('#x-text').value = JSON.stringify({ bkv3: 1, state: S, library: lib }, null, 1);
+    $('#x-text').select(); try { navigator.clipboard.writeText($('#x-text').value).catch(() => {}); } catch (e) {} });
+  $('#x-import').addEventListener('click', () => { try { const o = JSON.parse($('#x-text').value); if (o.library) lib = o.library; if (o.state) S = o.state;
+    renderAll(); changed(); $('#x-text').value = 'Imported.'; } catch (e) { $('#x-text').value = 'That text is not valid exported JSON: ' + e.message; } });
+  $('#x-example').addEventListener('click', () => { S = example(); renderAll(); changed(); });
+  $('#x-blank').addEventListener('click', () => { const ex = example(); S = { presetId: null, example: false, race: Object.assign(ex.race, { name: 'My race', presetId: null }), cfg: baseCfg(),
+    horses: Array.from({ length: 8 }, (_, i) => newHorse(i)) }; renderAll(); changed(); });
+}
+
+// ---------- LIBRARY ----------
+const RULE_TARGETS = [['s0', 'Front-runners'], ['s1', 'Stalkers'], ['s2', 'Closers'], ['s3', 'Deep closers'], ['s01', 'Front-runners + stalkers'], ['s13', 'Stalkers + deep closers'], ['s23', 'Closers + deep closers'], ['inside', 'Inside draw (no. 1–3)'], ['outside', 'Outside draw (last 3)'], ['lone', 'Lone front-runner']];
+const targetKey = t => Array.isArray(t) ? 's' + t.join('') : t;
+const targetVal = k => k.startsWith('s') ? k.slice(1).split('').map(Number) : k;
+let editCourse = null;
+function renderLibrary() {
+  if (!lib.courses.length) { $('#c-pick').innerHTML = ''; $('#c-edit').innerHTML = '<p class="hint">No racecourses yet. Use Add course to create one.</p>'; renderLibTables(); return; }
+  if (!editCourse || !lib.courses.find(c => c.id === editCourse)) editCourse = lib.courses[0].id;
+  $('#c-pick').innerHTML = lib.courses.map(c => `<option value="${c.id}"${c.id === editCourse ? ' selected' : ''}>${esc(c.name)}</option>`).join('');
+  const c = courseById(editCourse);
+  const rules = lib.rules.map((r, ix) => ({ r, ix })).filter(x => x.r.course === c.id || x.r.course === 'any');
+  $('#c-edit').innerHTML = `<div class="fields">
+    <label class="f"><span>Name</span><input type="text" id="ce-name" value="${esc(c.name)}"></label>
+    <label class="f"><span>Direction</span><select id="ce-dir">${opts(['Left-handed', 'Right-handed'], c.dir)}</select></label>
+    <label class="f check" style="align-self:end"><input type="checkbox" id="ce-circ"${c.circuits ? ' checked' : ''}> Has inner and outer circuits</label>
+    <div class="row" style="align-self:end">${c.id.startsWith('u') ? '<button class="btn small danger" id="ce-del">Delete course</button>' : ''}</div>
+  </div>
+  <h4 style="font-family:var(--font-display);font-weight:400;margin:16px 0 6px">Bias rules</h4>
+  <p class="hint">Points given to matching horses (doubled in the second pass). Rules marked "all courses" apply everywhere.</p>
+  <div class="scroll-x"><table class="lib" id="rule-table"><tr><th>Course</th><th>Surface</th><th>Short</th><th>Mid</th><th>Long</th><th>Circuit</th><th>Who</th><th>Points</th><th></th></tr>
+  ${rules.map(({ r, ix }) => `<tr data-ix="${ix}"><td>${r.course === 'any' ? 'All courses' : esc(c.name)}</td>
+    <td><select data-rk="surface">${['any', 'turf', 'dirt'].map(v => `<option value="${v}"${r.surface === v ? ' selected' : ''}>${v === 'any' ? 'Any' : v[0].toUpperCase() + v.slice(1)}</option>`).join('')}</select></td>
+    ${[0, 1, 2].map(d => `<td><input type="checkbox" data-rd="${d}"${r.dist.includes(d) ? ' checked' : ''} aria-label="distance ${d}"></td>`).join('')}
+    <td><select data-rk="circuit">${['any', 'inner', 'outer'].map(v => `<option value="${v}"${r.circuit === v ? ' selected' : ''}>${v[0].toUpperCase() + v.slice(1)}</option>`).join('')}</select></td>
+    <td><select data-rk="target">${RULE_TARGETS.map(([k, n]) => `<option value="${k}"${targetKey(r.target) === k ? ' selected' : ''}>${n}</option>`).join('')}</select></td>
+    <td><input type="number" min="-9" max="9" data-rk="pts" value="${r.pts}"></td>
+    <td><button class="btn small danger" data-rdel="${ix}">Remove</button></td></tr>`).join('')}</table></div>
+  <div class="row" style="margin-top:8px"><button class="btn small" id="rule-add">Add rule for ${esc(c.name)}</button></div>
+  <h4 style="font-family:var(--font-display);font-weight:400;margin:16px 0 6px">Course tips</h4>
+  <div class="grid cols-3">${['turf', 'dirt'].flatMap(s => [0, 1, 2].map(d => `<label class="f"><span>${s[0].toUpperCase() + s.slice(1)}, ${['short', 'mid', 'long'][d]}</span><textarea data-tip="${s}-${d}">${esc((c.tips || {})[s + '-' + d] || '')}</textarea></label>`)).join('')}</div>`;
+  renderLibTables();
+}
+function renderLibTables() {
+  // jockeys
+  const JH = ['Base', 'Turf', 'Dirt', 'Front/stalker', 'Closer', 'Short', 'Mid', 'Long'];
+  $('#j-table').innerHTML = `<tr><th>Jockey</th>${JH.map(h => `<th>${h}</th>`).join('')}<th>Best</th><th></th></tr>` + lib.jockeys.map((j, ix) => `<tr data-j="${ix}">
+    <td><input type="text" data-jn value="${esc(j.name)}"></td>${j.r.map((v, k) => `<td><input type="number" min="-9" max="9" data-jr="${k}" value="${v}" aria-label="${JH[k]}"></td>`).join('')}
+    <td class="num">${j.r[0] + Math.max(j.r[1], j.r[2]) + Math.max(j.r[3], j.r[4]) + Math.max(j.r[5], j.r[6], j.r[7])}</td>
+    <td><button class="btn small danger" data-jdel="${ix}">Remove</button></td></tr>`).join('');
+  // races
+  $('#rp-table').innerHTML = `<tr><th>Race</th><th>Grade</th><th>Course</th><th>Distance</th><th>Surface</th><th>Dir</th><th>Circuit</th><th>Weights</th><th>Low class</th><th></th></tr>` + lib.races.map((r, ix) => `<tr data-r="${ix}">
+    <td><input type="text" data-rp="name" value="${esc(r.name)}"></td><td>${esc(r.grade || 'custom')}</td>
+    <td><select data-rp="course">${lib.courses.map(c => `<option value="${c.id}"${c.id === r.course ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select></td>
+    <td><select data-rp="dist">${opts(['Short', 'Mid', 'Long'], r.dist)}</select></td><td><select data-rp="surface">${opts(['Turf', 'Dirt'], r.surface)}</select></td>
+    <td><select data-rp="dir">${opts(['Left', 'Right'], r.dir)}</select></td><td><select data-rp="circuit">${opts(['Inner', 'Outer', 'Single'], r.circuit)}</select></td>
+    <td><select data-rp="wcond">${opts(['Set', 'Allowance', 'Age', 'Handicap'], r.wcond)}</select></td>
+    <td><input type="checkbox" data-rp="lowClass"${r.lowClass ? ' checked' : ''}></td>
+    <td>${r.grade === 'custom' ? `<button class="btn small danger" data-rpdel="${ix}">Remove</button>` : ''}</td></tr>`).join('');
+}
+function bindLibrary() {
+  $('#c-pick').addEventListener('change', e => { editCourse = e.target.value; renderLibrary(); });
+  $('#c-add').addEventListener('click', () => { const id = 'u' + Date.now().toString(36); lib.courses.push({ id, name: 'New racecourse', dir: 1, circuits: false, tips: {} }); editCourse = id; changed(); renderLibrary(); renderRace(); });
+  $('#c-edit').addEventListener('change', e => {
+    const c = courseById(editCourse), t = e.target;
+    if (t.id === 'ce-name') c.name = t.value; else if (t.id === 'ce-dir') c.dir = +t.value; else if (t.id === 'ce-circ') c.circuits = t.checked;
+    else if (t.dataset.tip) { c.tips = c.tips || {}; c.tips[t.dataset.tip] = t.value; }
+    else { const tr = t.closest('tr[data-ix]'); if (tr) { const r = lib.rules[+tr.dataset.ix];
+      if (t.dataset.rk === 'target') r.target = targetVal(t.value); else if (t.dataset.rk === 'pts') r.pts = +t.value || 0; else if (t.dataset.rk) r[t.dataset.rk] = t.value;
+      if (t.dataset.rd) { const d = +t.dataset.rd; r.dist = t.checked ? [...new Set([...r.dist, d])].sort() : r.dist.filter(x => x !== d); } } }
+    changed(); renderRace(); if (t.id === 'ce-name') renderLibrary();
+  });
+  $('#c-edit').addEventListener('click', e => {
+    if (e.target.id === 'rule-add') { lib.rules.push({ course: editCourse, surface: 'turf', dist: [0, 1, 2], circuit: 'any', target: [1], pts: 1, src: 'user' }); changed(); renderLibrary(); }
+    if (e.target.dataset.rdel) { lib.rules.splice(+e.target.dataset.rdel, 1); changed(); renderLibrary(); }
+    if (e.target.id === 'ce-del') { lib.courses = lib.courses.filter(c => c.id !== editCourse); lib.rules = lib.rules.filter(r => r.course !== editCourse);
+      if (S.race.course === editCourse) S.race.course = lib.courses[0].id; editCourse = null; changed(); renderLibrary(); renderRace(); }
+  });
+  $('#j-add').addEventListener('click', () => { lib.jockeys.push({ id: 'uj' + Date.now().toString(36), name: 'New jockey', r: [2, 0, 0, 0, 0, 0, 0, 0] }); changed(); renderLibrary(); renderHorses(); });
+  $('#j-table').addEventListener('change', e => { const tr = e.target.closest('tr[data-j]'); if (!tr) return; const j = lib.jockeys[+tr.dataset.j];
+    if (e.target.dataset.jn !== undefined) j.name = e.target.value; else j.r[+e.target.dataset.jr] = Math.max(-9, Math.min(9, Math.round(+e.target.value || 0)));
+    changed(); renderLibrary(); renderHorses(); });
+  $('#j-table').addEventListener('click', e => { if (e.target.dataset.jdel === undefined) return; lib.jockeys.splice(+e.target.dataset.jdel, 1); changed(); renderLibrary(); renderHorses(); });
+  $('#rp-add').addEventListener('click', () => { lib.races.push({ id: 'ur' + Date.now().toString(36), name: 'New race', grade: 'custom', course: courseById(null).id, dist: 1, surface: 0, dir: courseById(null).dir, circuit: 2, age: 1, sex: 0, wcond: 0, tip: '', lowClass: false }); changed(); renderLibrary(); renderRace(); });
+  $('#rp-table').addEventListener('change', e => { const tr = e.target.closest('tr[data-r]'); if (!tr) return; const r = lib.races[+tr.dataset.r], k = e.target.dataset.rp;
+    r[k] = e.target.type === 'checkbox' ? e.target.checked : (k === 'name' || k === 'course') ? e.target.value : +e.target.value;
+    if (S.presetId === r.id) S.race = Object.assign(raceFromPreset(r), { name: S.race.name });
+    changed(); renderRace(); });
+  $('#rp-table').addEventListener('click', e => { if (e.target.dataset.rpdel === undefined) return; lib.races.splice(+e.target.dataset.rpdel, 1); changed(); renderLibrary(); renderRace(); });
+  const ROMLIB = () => clone({ courses: ROM.courses, jockeys: ROM.jockeys, races: ROM.races, rules: ROM.rules });
+  twoStep($('#c-clear'), 'Click again: remove all courses, rules and tips', () => { lib.courses = []; lib.rules = []; editCourse = null; S.race.course = 'none'; changed(); renderLibrary(); renderRace(); });
+  twoStep($('#c-restore'), 'Click again to restore', () => { const r = ROMLIB(); lib.courses = r.courses; lib.rules = r.rules; editCourse = null; changed(); renderLibrary(); renderRace(); });
+  twoStep($('#j-clear'), 'Click again: remove all jockeys', () => { lib.jockeys = []; S.horses.forEach(h => h.jockey = 'j61'); changed(); renderLibrary(); renderHorses(); });
+  twoStep($('#j-restore'), 'Click again to restore', () => { lib.jockeys = ROMLIB().jockeys; changed(); renderLibrary(); renderHorses(); });
+  twoStep($('#rp-clear'), 'Click again: remove all race presets', () => { lib.races = []; S.presetId = null; changed(); renderLibrary(); renderRace(); });
+  twoStep($('#rp-restore'), 'Click again to restore', () => { lib.races = ROMLIB().races; changed(); renderLibrary(); renderRace(); });
+  $('#lib-reset').addEventListener('click', e => {
+    const b = e.target; if (!b.dataset.confirm) { b.dataset.confirm = '1'; b.textContent = 'Click again to restore (your edits are lost)'; setTimeout(() => { delete b.dataset.confirm; b.textContent = 'Restore 1993 cartridge data'; }, 4000); return; }
+    lib = clone({ courses: ROM.courses, jockeys: ROM.jockeys, races: ROM.races, rules: ROM.rules }); delete b.dataset.confirm; b.textContent = 'Restore 1993 cartridge data'; changed(); renderAll();
+  });
+}
+
+// ---------- RESULTS ----------
+let lastResult = null;
+function compute() {
+  const race = Object.assign({}, S.race);
+  const res = BKV3.predict(race, S.horses, S.cfg, { jockeys: lib.jockeys, rules: lib.rules }, { fixBugs });
+  lastResult = res; return res;
+}
+function nameOf(i) { return S.horses[i] ? S.horses[i].name : '?'; }
+function renderOrder(el, P, limit) {
+  const max = Math.max(1, ...P.sorted.map(v => Math.abs(v)));
+  el.innerHTML = P.order.slice(0, limit).map((id, k) => `<li class="${k < 3 ? 'top' : ''}"><span class="rk">${k + 1}${['st', 'nd', 'rd'][k] || 'th'}</span>
+    <span class="hn">${id + 1}</span><span class="nm">${esc(nameOf(id))}</span><span class="bar" aria-hidden="true"><i style="width:${Math.max(0, P.sorted[k]) / max * 100}%"></i></span>
+    <span class="sc">${P.sorted[k]}</span></li>`).join('');
+}
+function renderResults() {
+  if (S.horses.filter(h => !h.scratched).length < 2) {
+    const msg = '<p class="hint" style="margin:0">Add at least two runners on the Horses tab to see a prediction.</p>';
+    $('#top-result').innerHTML = '<span class="eyebrow">Prediction</span>' + msg; ['#res-comment', '#res-picks', '#res-brackets', '#wf'].forEach(q => $(q).innerHTML = msg);
+    ['#res-order', '#res-order2', '#res-parts'].forEach(q => $(q).innerHTML = ''); $('#res-scale').textContent = ''; $('#wf-note').textContent = ''; $('#res-horse').innerHTML = ''; $('#wf-horse').innerHTML = ''; lastResult = null; return; }
+  const res = compute(), P = res.pass0, cm = res.commentary;
+  // top strip
+  const top = P.order.slice(0, 3).map((id, k) => `<span class="display" style="font-size:${k ? 1.05 : 1.35}rem">${['1st', '2nd', '3rd'][k]} <b>${id + 1}</b> ${esc(nameOf(id))}</span>`).join('<span class="hint">·</span>');
+  $('#top-result').innerHTML = `<span class="eyebrow">Prediction</span>${top}<span class="tag ${cm.cat === 4 || cm.cat === 3 ? 'good' : cm.cat <= 1 ? 'warn' : ''}" style="margin-left:auto">${cm.headline}</span>`;
+  $('#res-comment').innerHTML = `<div class="eyebrow">${esc(S.race.name || 'Race')} · ${esc(courseById(S.race.course).name)} ${S.race.surface ? 'dirt' : 'turf'} ${S.race.meters ? S.race.meters + ' m' : ''}</div>
+    <p class="headline">${cm.headline}</p><p>${cm.body}</p><p>${cm.connector} ${cm.follow}</p>`;
+  renderOrder($('#res-order'), P, 18); renderOrder($('#res-order2'), res.pass1, 6);
+  const notes = [`One point is worth ${P.scale} in this race.`];
+  if (res.alt) notes.push('Young or low-class field: the game ignores records and trusts jockey, marks and odds.');
+  if (!fixBugs && !res.alt) notes.push('Paddock counts 250% here (cartridge bug).');
+  $('#res-scale').textContent = notes.join(' ');
+  const groups = [['Favorite picks (本命)', 0], ['Mid-price picks', 1], ['Longshot picks (穴)', 2]];
+  const pickHtml = (list, bracket) => groups.map(([g, c]) => { const ps = list.filter(p => p.cat === c); if (!ps.length) return '';
+    return `<div style="margin-bottom:10px"><div class="eyebrow" style="margin-bottom:4px">${g}</div><div class="picks">${ps.map(p => `<span class="pick${c === 0 ? ' fav' : ''}">${bracket ? p.lo : p.lo + 1}–${bracket ? p.hi : p.hi + 1}${!bracket && p.product ? `<small title="product of rounded odds">×${p.product}</small>` : ''}</span>`).join('')}</div></div>`; }).join('');
+  $('#res-picks').innerHTML = pickHtml(res.picks, false) || '<p class="hint">No pair qualified. Enter win odds for the runners.</p>';
+  $('#res-brackets').innerHTML = (pickHtml(res.bracketPicks, true) || '<p class="hint">No bracket pairs.</p>') + (S.horses.length <= 8 ? '<p class="hint">With 8 or fewer runners every horse has its own bracket.</p>' : '');
+  // breakdown
+  const sel = $('#res-horse'), cur = sel.value === '' ? P.order[0] : +sel.value;
+  sel.innerHTML = S.horses.map((h, i) => `<option value="${i}"${i === cur ? ' selected' : ''}>${i + 1}. ${esc(h.name)}${h.scratched ? ' (scratched)' : ''}</option>`).join('');
+  renderParts(cur);
+  renderWaterfall();
+}
+function renderParts(i) {
+  const res = lastResult; if (!res) return;
+  const a = res.pass0.parts[i] || {}, b = res.pass1.parts[i] || {};
+  const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])];
+  const cell = v => v === undefined ? '<td class="v">–</td>' : `<td class="v ${v > 0 ? 'pos' : v < 0 ? 'neg' : ''}">${v > 0 ? '+' : ''}${v}</td>`;
+  const tot0 = res.pass0.score[i], tot1 = res.pass1.score[i];
+  $('#res-parts').innerHTML = `<tr><th>Factor</th><th style="text-align:right">Pass 1</th><th style="text-align:right">Pass 2</th></tr>` +
+    keys.map(k => `<tr><td>${k}</td>${cell(a[k])}${cell(b[k])}</tr>`).join('') +
+    `<tr><th>Total</th>${cell(tot0)}${cell(tot1)}</tr>`;
+}
+
+
+// ---------- waterfall ----------
+let wfPass = 0;
+function renderWaterfall() {
+  const res = lastResult; if (!res) return;
+  const sel = $('#wf-horse'); const cur = sel.value === '' ? res.pass0.order[0] : +sel.value;
+  sel.innerHTML = S.horses.map((h, i) => `<option value="${i}"${i === cur ? ' selected' : ''}>${i + 1}. ${esc(h.name)}${h.scratched ? ' (scratched)' : ''}</option>`).join('');
+  const P = wfPass ? res.pass1 : res.pass0, parts = P.parts[cur] || {};
+  const steps = Object.entries(parts).filter(([, v]) => v !== 0);
+  let run = 0; const rows = steps.map(([k, v]) => { const a = run; run += v; return { k, v, a, b: run }; });
+  const total = P.score[cur];
+  const lo = Math.min(0, ...rows.map(r => Math.min(r.a, r.b))), hi = Math.max(1, ...rows.map(r => Math.max(r.a, r.b)), total);
+  const span = hi - lo || 1, X = v => (v - lo) / span * 100;
+  const step = niceStep(span / 4), ticks = []; for (let t = Math.ceil(lo / step) * step; t <= hi; t += step) ticks.push(t);
+  const grid = ticks.map(t => `<i class="${t === 0 ? 'zero' : 'grid-l'}" style="left:${X(t)}%"></i>`).join('') + (ticks.includes(0) ? '' : `<i class="zero" style="left:${X(0)}%"></i>`);
+  const row = (r, cls, i) => `<div class="wf-row${cls ? ' ' + cls : ''}" tabindex="0" data-i="${i}">
+    <span class="lab">${esc(r.k)}</span><span class="wf-track">${grid}<span class="seg ${cls === 'total' ? 'tot' : r.v >= 0 ? 'gain' : 'loss'}" style="left:${X(Math.min(r.a, r.b))}%;width:${Math.abs(X(r.b) - X(r.a))}%"></span></span>
+    <span class="val">${cls === 'total' ? r.b : (r.v > 0 ? '+' : '') + r.v}</span><span class="run">${r.b}</span></div>`;
+  $('#wf').innerHTML = `<div class="wf-head"><span>Factor</span><span class="wf-axis">${ticks.map(t => `<span style="left:${X(t)}%">${t}</span>`).join('')}</span><span class="r">Change</span><span class="r run">Running</span></div>` +
+    (rows.length ? rows.map((r, i) => row(r, '', i)).join('') : '<p class="hint">No points in this pass.</p>') + row({ k: 'Total', v: total, a: 0, b: total }, 'total', -1) + '<div class="wf-tip" hidden></div>';
+  const U = P.scale, h = S.horses[cur];
+  $('#wf-note').textContent = `One point = ${U} in this race, so a +1 item at 100% adds ${U}. ` + (wfPass ? 'Pass 2 starts from zero and is only used for bet picks.' : `Rank ${P.order.indexOf(cur) + 1} of ${P.order.length} in the finishing order.`) + (h && h.scratched ? ' This horse is scratched and is left out of the ranking.' : '');
+  const tip = $('#wf .wf-tip');
+  const show = el => { const i = +el.dataset.i; const r = i < 0 ? { k: 'Total', v: total, b: total } : rows[i];
+    tip.innerHTML = `<b>${esc(r.k)}</b><br>${i < 0 ? 'Final score' : 'Change'}: <span class="mono">${i < 0 ? r.b : (r.v > 0 ? '+' : '') + r.v}</span>` + (i < 0 ? '' : `<br>≈ <span class="mono">${(r.v / U).toFixed(1)}</span> points of ${U}<br>Running total: <span class="mono">${r.b}</span>`);
+    tip.hidden = false; const box = $('#wf').getBoundingClientRect(), b = el.getBoundingClientRect();
+    tip.style.top = (b.bottom - box.top + 4) + 'px'; tip.style.left = Math.min(box.width - 200, Math.max(0, b.left - box.left + 120)) + 'px'; };
+  $$('#wf .wf-row').forEach(el => { el.addEventListener('mouseenter', () => show(el)); el.addEventListener('focus', () => show(el));
+    el.addEventListener('mouseleave', () => tip.hidden = true); el.addEventListener('blur', () => tip.hidden = true); });
+}
+function niceStep(x) { const p = Math.pow(10, Math.floor(Math.log10(x || 1))), m = x / p; return (m < 1.5 ? 1 : m < 3 ? 2 : m < 7 ? 5 : 10) * p; }
+$('#wf-horse').addEventListener('change', renderWaterfall);
+$('#wf-p0').addEventListener('click', () => { wfPass = 0; $('#wf-p0').setAttribute('aria-pressed', 'true'); $('#wf-p1').setAttribute('aria-pressed', 'false'); renderWaterfall(); });
+$('#wf-p1').addEventListener('click', () => { wfPass = 1; $('#wf-p1').setAttribute('aria-pressed', 'true'); $('#wf-p0').setAttribute('aria-pressed', 'false'); renderWaterfall(); });
+// ---------- tabs, mode ----------
+function showTab(t) {
+  $$('nav.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t ? 'true' : 'false'));
+  $$('.panel').forEach(p => p.hidden = p.id !== 'tab-' + t);
+  try { history.replaceState(null, '', '#' + t); } catch (e) {}
+  store.set('tab', t);
+}
+$$('nav.tabs button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+$('#res-horse').addEventListener('change', e => renderParts(+e.target.value));
+function setMode(f) { fixBugs = f; $('#mode-orig').setAttribute('aria-pressed', !f); $('#mode-fix').setAttribute('aria-pressed', f); save(); renderResults(); }
+$('#mode-orig').addEventListener('click', () => setMode(false)); $('#mode-fix').addEventListener('click', () => setMode(true));
+
+function changed() { save(); renderResults(); }
+function renderAll() { renderRace(); renderHorses(); renderSettings(); renderLibrary(); renderResults(); }
+bindRace(); bindHorses(); bindSettings(); bindLibrary();
+renderAll();
+setMode(fixBugs);
+const want = (location.hash || '').slice(1);
+showTab(['race', 'horses', 'results', 'settings', 'library', 'how'].includes(want) ? want : (store.get('tab') || 'results'));
+})();
+</script>
